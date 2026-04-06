@@ -1,0 +1,13 @@
+# Stage 1: recent drinking + motivation
+warm:
+  transition: "Thanks. Next we'll talk about situations where drinking tends to creep up."
+  stage_hint: "Clarify pattern and motivation to cut down; one open theme per turn; no lecturing or strategy stacking."
+  slots:
+    recent_drinking: "Over the past week or two, what has your drinking looked like? (frequency, settings, or rough amount—whatever comes to mind.)"
+    reduce_motivation: "What matters most to you about drinking less—even one sentence is fine."
+neutral:
+  transition: "Next topic: drinking triggers and high-risk situations."
+  stage_hint: "Collect drinking pattern and motivation objectively; one follow-up point per turn."
+  slots:
+    recent_drinking: "Briefly describe how often you drank and roughly how much over the past week or two (your own words)."
+    reduce_motivation: "In one sentence, what is your main reason for wanting to reduce drinking?"

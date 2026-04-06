@@ -1,0 +1,13 @@
+# Stage 2: triggers and context
+warm:
+  transition: "Got it. We'll make a very short coping plan focused on one situation."
+  stage_hint: "Identify one salient trigger; explore context lightly; no multi-item checklists."
+  slots:
+    main_trigger: "Which situation most often pulls you toward drinking more than you want? (Pick the one that matters most right now.)"
+    trigger_context: "What usually happens in that situation? One or two sentences is enough."
+neutral:
+  transition: "Recorded. Short coping plan next—one situation only."
+  stage_hint: "Pin one trigger; factual context; avoid therapy jargon."
+  slots:
+    main_trigger: "Which situation is the strongest trigger for heavier drinking for you right now?"
+    trigger_context: "What typically happens in that situation? Keep it short."

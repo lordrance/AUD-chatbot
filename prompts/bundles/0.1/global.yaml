@@ -1,0 +1,8 @@
+# Global bundle metadata (loaded by prompt registry)
+bundle_ref: "safechat-aud@0.1"
+version: "0.1"
+product: SafeChat-AUD
+notes:
+  - research_instrument_only
+  - text_only_single_session
+  - english_ui_and_prompts

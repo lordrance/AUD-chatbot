@@ -1,0 +1,13 @@
+# Stage 0: orientation / readiness
+warm:
+  transition: "Good. Next we'll look at your drinking over roughly the last week or two."
+  stage_hint: "Explain study nature and length; no alcohol education or diagnosis; collect orientation_ack and time_ok only."
+  slots:
+    orientation_ack: "Thanks for participating. This is about 20–25 minutes of text chat for research (not treatment, not crisis care). In one short sentence, please confirm you understand."
+    time_ok: "Is it okay to continue now? If not, you can say so briefly."
+neutral:
+  transition: "Next, we'll cover drinking frequency and approximate amount over the past week."
+  stage_hint: "State duration and format; avoid implying clinical care; single confirmation question."
+  slots:
+    orientation_ack: "This is a ~20–25 minute research conversation, text only. Please confirm you have read and understood the above."
+    time_ok: "Please confirm whether you can continue now (yes/no with a brief note is fine)."

@@ -1,0 +1,217 @@
+/**
+ * 聊天页：多轮 POST chat/turn、消息 localStorage 缓存、快捷短语与安全提示条。
+ */
+import { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import * as api from "../api";
+import type { ChatMessage } from "../types";
+import { ProgressBar } from "../components/ProgressBar";
+import { HelpResourcesModal } from "../components/HelpResourcesModal";
+import { loadSession, routeForStatus } from "../flow";
+import { progressStepForPath } from "../flow";
+
+const MSG_KEY = (id: string) => `safechat_aud_msgs_${id}`;
+
+const QUICK: Record<string, string[]> = {
+  "0:orientation_ack": ["I understand", "I've read it—let's continue"],
+  "0:time_ok": ["Yes, this is a good time", "I'm free now"],
+  "1:recent_drinking": ["About three or four times last week", "It varied"],
+  "1:reduce_motivation": ["I want to drink less", "Mostly sleep and health"],
+  "2:main_trigger": ["Work or social events", "When I'm home alone"],
+  "2:trigger_context": ["Hard to say no", "It's how I unwind"],
+  "3:support_focus": ["Delay the first drink", "Switch to non-alcoholic options"],
+  "3:micro_plan_step": [
+    "If there's a dinner out, I'll drink a glass of water first.",
+    "If I want a drink at home, I'll take a ten-minute walk first.",
+  ],
+  "4:closing_ack": ["Nothing else", "Not right now"],
+};
+
+/** 将快捷语配置统一为字符串数组。 */
+function normalizeQuick(val: string | string[]): string[] {
+  return Array.isArray(val) ? val : [val];
+}
+
+/** 研究聊天主界面（含发送、跳过、资源弹窗）。 */
+export function ChatPage() {
+  const navigate = useNavigate();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [chatStage, setChatStage] = useState<number | null>(null);
+  const [substate, setSubstate] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [done, setDone] = useState(false);
+  const [safetyBanner, setSafetyBanner] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    const s = loadSession();
+    if (!s) {
+      navigate("/");
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(MSG_KEY(s.sessionId));
+      if (raw) setMessages(JSON.parse(raw) as ChatMessage[]);
+    } catch {
+      /* ignore */
+    }
+    api.getState(s.sessionId, s.token).then((st) => {
+      if (st.status === "post_survey_pending") {
+        navigate("/chat-summary");
+        return;
+      }
+      if (st.status === "abandoned") {
+        navigate("/safety-end?reason=emergency");
+        return;
+      }
+      if (st.status !== "chat_ready" && st.status !== "chat_active") {
+        navigate(routeForStatus(st.status));
+        return;
+      }
+      setChatStage(st.chat_stage ?? st.current_stage ?? 0);
+      setSubstate(st.current_substate);
+      setSafetyBanner(!!st.safety_show_resources_prompt);
+    });
+  }, [navigate]);
+
+  /** 将当前消息列表序列化到 localStorage。 */
+  function persist(next: ChatMessage[]) {
+    const s = loadSession();
+    if (s) localStorage.setItem(MSG_KEY(s.sessionId), JSON.stringify(next));
+  }
+
+  /** 乐观更新用户消息后请求 API，合并助手回复并处理关闭/跳转。 */
+  async function sendText(text: string) {
+    const t = text.trim();
+    if (!t) return;
+    const s = loadSession();
+    if (!s) return;
+    setBusy(true);
+    setErr(null);
+    const userMsg: ChatMessage = { role: "user", text: t };
+    const prev = messages;
+    const next = [...prev, userMsg];
+    setMessages(next);
+    persist(next);
+    setInput("");
+    try {
+      const res = await api.postChatTurn(s.sessionId, s.token, t);
+      const asst: ChatMessage = { role: "assistant", text: res.assistant_text };
+      const withBot = [...next, asst];
+      setMessages(withBot);
+      persist(withBot);
+      if (res.status_after === "abandoned") {
+        setDone(true);
+        navigate("/safety-end?reason=emergency");
+        return;
+      }
+      const st = await api.getState(s.sessionId, s.token);
+      setChatStage(st.chat_stage ?? st.current_stage ?? res.stage_after);
+      setSubstate(st.current_substate);
+      setSafetyBanner(!!st.safety_show_resources_prompt);
+      if (res.safety_resources_suggested) {
+        setHelpOpen(true);
+      }
+      if (res.chat_closed || st.post_survey_unlocked) {
+        setDone(true);
+        navigate("/chat-summary");
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Send failed");
+      setMessages(prev);
+      persist(prev);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const quick = substate && QUICK[substate] ? normalizeQuick(QUICK[substate]) : [];
+
+  return (
+    <>
+      <ProgressBar step={progressStepForPath("/chat")} chatStage={chatStage} />
+      <section className="card chat-card">
+        <h2>Research chat</h2>
+        {safetyBanner && (
+          <p className="notice" role="status">
+            Suggestion: when you can, open Help & resources for support information. Unless the rules require ending the
+            chat, you can usually keep replying.
+          </p>
+        )}
+        <p className="muted small">
+          Text only. Answer the questions you see; use quick phrases or type freely. This chat is{" "}
+          <strong>not</strong> continuously monitored by staff.
+          {done ? " The chat has ended; continuing to the next step…" : ""}
+        </p>
+        <div className="msg-list" role="log" aria-live="polite">
+          {messages.length === 0 && (
+            <p className="muted">
+              Type your <strong>first</strong> reply below (for example, confirm you read the study information).
+            </p>
+          )}
+          {messages.map((m, i) => (
+            <div key={i} className={`msg msg-${m.role}`}>
+              <span className="msg-label">{m.role === "user" ? "You" : "Assistant"}</span>
+              <div className="msg-body">{m.text}</div>
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+        {quick.length > 0 && (
+          <div className="quick-row">
+            <span className="muted small">Quick replies (optional):</span>
+            {quick.map((q) => (
+              <button
+                key={q}
+                type="button"
+                className="chip"
+                disabled={busy}
+                onClick={() => {
+                  setInput(q);
+                }}
+              >
+                {q.length > 24 ? `${q.slice(0, 24)}…` : q}
+              </button>
+            ))}
+          </div>
+        )}
+        {err && <p className="error">{err}</p>}
+        <div className="chat-input-row">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type your reply…"
+            rows={3}
+            disabled={busy}
+            maxLength={4000}
+          />
+          <div className="chat-actions">
+            <button type="button" className="btn" disabled={busy} onClick={() => sendText(input)}>
+              Send
+            </button>
+            <button
+              type="button"
+              className="btn secondary"
+              disabled={busy}
+              onClick={() => sendText("(skip)")}
+              title="Sends a placeholder reply; still counts as one user turn"
+            >
+              Skip this turn
+            </button>
+            <button type="button" className="btn tertiary" onClick={() => setHelpOpen(true)}>
+              Help & resources
+            </button>
+          </div>
+        </div>
+      </section>
+      <HelpResourcesModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+    </>
+  );
+}

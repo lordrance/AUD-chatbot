@@ -1,0 +1,40 @@
+# SafeChat-AUD 提示词包清单
+bundle_id: safechat-aud
+default_version: "0.2.1"
+bundles:
+  "0.1":
+    schema: 1
+    description: "v0.1 冻结快照（首轮 QA 前）"
+    files:
+      global: bundles/0.1/global.yaml
+      warm: bundles/0.1/warm.yaml
+      neutral: bundles/0.1/neutral.yaml
+      stage_0: bundles/0.1/stage_0_onboarding.yaml
+      stage_1: bundles/0.1/stage_1_assess.yaml
+      stage_2: bundles/0.1/stage_2_triggers.yaml
+      stage_3: bundles/0.1/stage_3_plan.yaml
+      stage_4: bundles/0.1/stage_4_close.yaml
+  "0.2":
+    schema: 1
+    description: "首轮 QA 冻结（含 transition 与槽位双问号问题；见 failure_taxonomy_v01）"
+    files:
+      global: bundles/0.2/global.yaml
+      warm: bundles/0.2/warm.yaml
+      neutral: bundles/0.2/neutral.yaml
+      stage_0: bundles/0.2/stage_0_onboarding.yaml
+      stage_1: bundles/0.2/stage_1_assess.yaml
+      stage_2: bundles/0.2/stage_2_triggers.yaml
+      stage_3: bundles/0.2/stage_3_plan.yaml
+      stage_4: bundles/0.2/stage_4_close.yaml
+  "0.2.1":
+    schema: 1
+    description: "QA cycle 1：去重 transition 问句、强化单问句、自动评分对齐"
+    files:
+      global: global.yaml
+      warm: warm.yaml
+      neutral: neutral.yaml
+      stage_0: stage_0_onboarding.yaml
+      stage_1: stage_1_assess.yaml
+      stage_2: stage_2_triggers.yaml
+      stage_3: stage_3_plan.yaml
+      stage_4: stage_4_close.yaml

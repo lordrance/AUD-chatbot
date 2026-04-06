@@ -1,0 +1,63 @@
+{
+  "version": "0.2",
+  "description": "SafeChat-AUD brief, low-risk coping strategies for Stage 3 and LLM selected_strategy_ids. Not medical advice.",
+  "usage": "Each item has strategy_id; the model may output 0–2 ids when relevant. assistant_text stays one question, short.",
+  "strategies": [
+    {
+      "strategy_id": "delay_first_drink",
+      "name": "Delay the first drink",
+      "suitable_for": ["Automatic pour at a usual time", "Social pressure starting early"],
+      "not_for": ["Acute withdrawal signs", "Unsupervised abrupt cessation when clinically unsafe"],
+      "example_if_then_format": "If I want a drink at 8pm, I'll leave the bottle in the kitchen and shower for 10 minutes first."
+    },
+    {
+      "strategy_id": "alternate_with_water",
+      "name": "One alcoholic drink, one water",
+      "suitable_for": ["Parties or dinners where you want to slow pace"],
+      "not_for": ["If water does not slow intake and risk escalates"],
+      "example_if_then_format": "If someone pushes a drink, I'll drink half a glass of water before each sip of alcohol."
+    },
+    {
+      "strategy_id": "text_support_person",
+      "name": "Text a support person",
+      "suitable_for": ["Stress or loneliness spikes", "You have a trusted contact"],
+      "not_for": ["No safe contact or contact worsens conflict"],
+      "example_if_then_format": "If I crave a drink after work, I'll text ___ 'rough day—two minutes?' and wait 10 minutes before deciding."
+    },
+    {
+      "strategy_id": "fifteen_min_substitute",
+      "name": "15-minute substitute activity",
+      "suitable_for": ["Short urges that ease with distraction"],
+      "not_for": ["Suicidal ideation or crisis—use emergency resources"],
+      "example_if_then_format": "If I head to the fridge for alcohol, I'll walk outside for 15 minutes or listen to one podcast episode first."
+    },
+    {
+      "strategy_id": "non_alcoholic_substitute",
+      "name": "Non-alcoholic substitute",
+      "suitable_for": ["Need a glass in hand at social events"],
+      "not_for": ["Allergy or strong aversion to substitutes"],
+      "example_if_then_format": "If a client toasts, I'll order a non-alcoholic beer or soda and use a brief excuse."
+    },
+    {
+      "strategy_id": "leave_occasion_early",
+      "name": "Leave the setting earlier",
+      "suitable_for": ["You can exit safely", "Risk rises after a certain round"],
+      "not_for": ["Cannot leave and needs a different plan"],
+      "example_if_then_format": "If round two starts to hit hard, I'll leave by 9pm using 'early meeting tomorrow.'"
+    },
+    {
+      "strategy_id": "remove_alcohol_from_sight",
+      "name": "Keep alcohol out of sight",
+      "suitable_for": ["Home drinking habit with strong visual cues"],
+      "not_for": ["Household conflict if moving bottles"],
+      "example_if_then_format": "If I sit on the couch after dinner, I'll store bottles in a cabinet and keep only NA drinks visible."
+    },
+    {
+      "strategy_id": "buddy_check_in",
+      "name": "Check-in with a buddy",
+      "suitable_for": ["Want external accountability", "Stable relationship with peer"],
+      "not_for": ["Privacy concerns about sharing drinking goals"],
+      "example_if_then_format": "If it's a risky Friday, I'll text ___ 'green/yellow/red' at 8pm before ordering another round."
+    }
+  ]
+}

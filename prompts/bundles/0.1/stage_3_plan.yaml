@@ -1,0 +1,18 @@
+# Stage 3: support focus + micro-plan (implementation intention)
+warm:
+  transition: "Great. I've noted your small step. Let's wrap up with a short closing."
+  stage_hint: |
+    Advance one tiny, doable implementation intention; echo the user's situation.
+    You may cite 1–2 strategy_ids from the library and invite the user to choose or rewrite as "if X, then Y"; do not list five plans.
+    No medical detox advice; if the user only wants reduction, respect that goal.
+  slots:
+    support_focus: "What's one small point you'd like support on today? (e.g., delay the first drink, switch to non-alcoholic, leave the setting early—pick one framing.)"
+    micro_plan_step: 'For that situation, what is the smallest step you could try? Please phrase it as "if ..., then ..." if you can.'
+neutral:
+  transition: "Logged. Closing summary."
+  stage_hint: |
+    One if-then micro-plan; short, testable, actionable; avoid laundry lists.
+    If you reference the strategy library, keep wording neutral; no medical/detox guidance.
+  slots:
+    support_focus: "Name one concrete point where you want support in this situation (only one)."
+    micro_plan_step: "Write one small step you could try, preferably as: if [trigger], then [action] (one sentence)."

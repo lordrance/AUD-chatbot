@@ -1,0 +1,11 @@
+# Stage 4: closing
+warm:
+  transition: "Thank you. Please complete the brief post-survey questions next. We'll stop here for today."
+  stage_hint: "Brief close; you may appreciate their effort; do not open new topics."
+  slots:
+    closing_ack: "Anything else to add? If not, reply \"none\"."
+neutral:
+  transition: "Thank you. Please continue to the post-survey."
+  stage_hint: "Brief check for additions; no new discussion."
+  slots:
+    closing_ack: "Anything else to add? If not, reply \"none\"."

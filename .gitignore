@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.acceptance
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+apps/web/dist/
+apps/web/tsconfig.tsbuildinfo
+*.local
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Offline eval artifacts
+eval/output/
+
+# Local exports / participant data (do not commit)
+_user_data_export/
+debug-*.log
