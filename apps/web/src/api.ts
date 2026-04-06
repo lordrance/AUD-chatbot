@@ -113,9 +113,29 @@ export async function postChatTurn(sessionId: string, token: string, text: strin
     stage_after: number;
     chat_closed: boolean;
     status_after: string;
+    stage1_feedback_required?: boolean;
     safety_severity_this_turn?: number;
     safety_routing_action?: string;
     safety_resources_suggested?: boolean;
+  };
+}
+
+/** POST Stage1 反馈确认后继续聊天（下发 Stage2 首问）。 */
+export async function postStage1FeedbackContinue(sessionId: string, token: string) {
+  const r = await fetch(`${B}/sessions/${sessionId}/chat/stage1-feedback/continue`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: "{}",
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new HttpError(typeof body === "string" ? body : JSON.stringify(body), r.status, body);
+  return body as {
+    ok: true;
+    assistant_text: string;
+    stub: boolean;
+    status_after: string;
+    exchange_index: number;
+    prompt_version?: string | null;
   };
 }
 

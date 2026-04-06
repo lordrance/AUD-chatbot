@@ -15,7 +15,7 @@ class ConsentSubmit(BaseModel):
 
 
 class EligibilitySubmit(BaseModel):
-    """资格筛查请求体：年龄、性别、AUDIT-C 三项（各 0–4）及是否愿意减量。"""
+    """资格筛查：AUDIT-C、减量意愿 + PDF 入组前安全筛查（任一危机项为真则不合格）。"""
 
     age_years: int = Field(ge=0, le=120, description="Age in years; eligibility decided server-side")
     sex_at_birth: Literal["male", "female", "other"]
@@ -23,16 +23,42 @@ class EligibilitySubmit(BaseModel):
     audit_c_typical_quantity: int = Field(ge=0, le=4, description="AUDIT-C Q2 typical quantity 0–4")
     audit_c_binge: int = Field(ge=0, le=4, description="AUDIT-C Q3 binge frequency 0–4")
     wants_to_reduce_drinking: bool = Field(description="Wants to reduce drinking (inclusion criterion)")
+    crisis_seeking_emergency_help_now: bool = Field(
+        default=False,
+        description="True if participant needs emergency help right now (exclusion).",
+    )
+    crisis_unable_to_complete_severe_distress: bool = Field(
+        default=False,
+        description="True if too unwell to complete the session (exclusion).",
+    )
+    crisis_needs_immediate_medical_or_clinical: bool = Field(
+        default=False,
+        description="True if needs immediate medical/crisis services (exclusion).",
+    )
 
 
 class BaselineSubmit(BaseModel):
-    """基线问卷：上周饮酒量、改变准备度与可选一句关注。"""
+    """基线问卷：饮酒、准备度、重要性、人口学简要、AI 使用史、治疗状态等（PDF 扩展）。"""
 
     typical_drinks_last_week: float = Field(ge=0, le=1000, description="Approx. standard drinks last week")
     readiness_to_change_1_10: int = Field(ge=1, le=10, description="Readiness to change 1–10")
+    importance_to_reduce_0_10: int = Field(ge=0, le=10, description="How important is cutting down now (0–10)")
+    prior_chatbot_or_ai_use: Literal["never", "rarely", "sometimes", "often"] = Field(
+        description="Prior use of chatbots/AI for health or habits"
+    )
+    in_treatment_for_aud_or_mental_health: bool = Field(
+        description="Currently in any treatment for alcohol use or mental health"
+    )
+    treatment_notes: str | None = Field(default=None, max_length=500)
+    education_level: Literal["less_than_hs", "hs_ged", "some_college", "college_grad", "grad_prof", "prefer_not"] = Field(
+        description="Highest education (brief demographics)"
+    )
+    employment_status: Literal["employed", "student", "unemployed", "retired", "other", "prefer_not"] = Field(
+        description="Current employment status"
+    )
     primary_concern_short: str | None = Field(default=None, max_length=500)
 
-    @field_validator("primary_concern_short")
+    @field_validator("primary_concern_short", "treatment_notes")
     @classmethod
     def strip_optional(cls, v: str | None) -> str | None:
         """可选字段去空白；全空白则视为未填。"""
@@ -142,12 +168,37 @@ class SessionStateResponse(BaseModel):
         default=None,
         description="Structured summary at chat end (export); see chat_summary_json.",
     )
+    chat_section_1_to_4: int | None = Field(
+        default=None,
+        ge=1,
+        le=4,
+        description="Chat-only progress 1/4–4/4: FSM0→1, FSM1→2, FSM2→3, FSM3–4→4; Stage1 feedback pause shows 2/4.",
+    )
+    max_user_turns_current_stage: int | None = Field(
+        default=None,
+        description="Server cap for user turns in current chat stage; null if N/A.",
+    )
+    stage1_feedback_card: dict[str, Any] | None = Field(
+        default=None,
+        description="When status is stage1_feedback_pending: baseline drinks + Stage1 slot recap.",
+    )
 
 
 class PostSurveySubmit(BaseModel):
-    """后测问卷（schema v2）：联盟/过程量表、操纵检验项与两道开放题。"""
+    """后测问卷（schema v3）：WAI-TECH-SF 12 项（1–7）、过程量表、操纵检验与两道开放题。"""
 
-    therapeutic_alliance_1_5: int = Field(ge=1, le=5, description="Overall digital therapeutic alliance")
+    wai_tech_sf_item_01: int = Field(ge=1, le=7, description="WAI-TECH-SF item 1")
+    wai_tech_sf_item_02: int = Field(ge=1, le=7)
+    wai_tech_sf_item_03: int = Field(ge=1, le=7)
+    wai_tech_sf_item_04: int = Field(ge=1, le=7)
+    wai_tech_sf_item_05: int = Field(ge=1, le=7)
+    wai_tech_sf_item_06: int = Field(ge=1, le=7)
+    wai_tech_sf_item_07: int = Field(ge=1, le=7)
+    wai_tech_sf_item_08: int = Field(ge=1, le=7)
+    wai_tech_sf_item_09: int = Field(ge=1, le=7)
+    wai_tech_sf_item_10: int = Field(ge=1, le=7)
+    wai_tech_sf_item_11: int = Field(ge=1, le=7)
+    wai_tech_sf_item_12: int = Field(ge=1, le=7)
     trust_1_5: int = Field(ge=1, le=5)
     helpfulness_1_5: int = Field(ge=1, le=5)
     disclosure_comfort_1_5: int = Field(ge=1, le=5)
@@ -180,10 +231,25 @@ class ChatTurnResponse(BaseModel):
     exchange_index: int
     status_after: str
     chat_closed: bool = False
+    stage1_feedback_required: bool = Field(
+        default=False,
+        description="True: participant should open Stage 1 feedback screen before continuing chat.",
+    )
     prompt_version: str | None = None
     safety_severity_this_turn: int = Field(default=0, ge=0, le=3)
     safety_routing_action: str = Field(default="CONTINUE")
     safety_resources_suggested: bool = False
+
+
+class Stage1FeedbackContinueResponse(BaseModel):
+    """确认 Stage1 反馈卡后继续聊天：返回 Stage2 首条助手文案。"""
+
+    ok: Literal[True] = True
+    assistant_text: str
+    stub: bool = True
+    status_after: str
+    exchange_index: int
+    prompt_version: str | None = None
 
 
 class ConsentDocumentResponse(BaseModel):

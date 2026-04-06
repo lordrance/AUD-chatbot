@@ -17,6 +17,9 @@ export function EligibilityPage() {
   const [qty, setQty] = useState(2);
   const [binge, setBinge] = useState(2);
   const [wantsReduce, setWantsReduce] = useState(true);
+  const [crisisEmergency, setCrisisEmergency] = useState(false);
+  const [crisisUnwell, setCrisisUnwell] = useState(false);
+  const [crisisClinical, setCrisisClinical] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -46,6 +49,9 @@ export function EligibilityPage() {
         audit_c_typical_quantity: qty,
         audit_c_binge: binge,
         wants_to_reduce_drinking: wantsReduce,
+        crisis_seeking_emergency_help_now: crisisEmergency,
+        crisis_unable_to_complete_severe_distress: crisisUnwell,
+        crisis_needs_immediate_medical_or_clinical: crisisClinical,
       });
       if (res.ok === false) {
         navigate("/ineligible");
@@ -65,6 +71,25 @@ export function EligibilityPage() {
       <section className="card">
         <h2>Eligibility screening</h2>
         <p className="muted">Each AUDIT-C item is scored 0–4; inclusion is decided on the server using the study threshold.</p>
+        <fieldset className="crisis-screen">
+          <legend>Safety screening (required)</legend>
+          <p className="muted small">
+            This study is <strong>not</strong> emergency care. If any of the following apply, do <strong>not</strong> continue—use
+            Help &amp; resources or local emergency services.
+          </p>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={crisisEmergency} onChange={(e) => setCrisisEmergency(e.target.checked)} />I need
+            emergency help <strong>right now</strong>
+          </label>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={crisisUnwell} onChange={(e) => setCrisisUnwell(e.target.checked)} />I am too unwell
+            to complete this session safely
+          </label>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={crisisClinical} onChange={(e) => setCrisisClinical(e.target.checked)} />I need
+            immediate medical or crisis services
+          </label>
+        </fieldset>
         <label>
           Age (years)
           <input
@@ -128,7 +153,12 @@ export function EligibilityPage() {
         </label>
         {err && <p className="error">{err}</p>}
         <div className="actions">
-          <button type="button" className="btn" onClick={submit} disabled={busy}>
+          <button
+            type="button"
+            className="btn"
+            onClick={submit}
+            disabled={busy || crisisEmergency || crisisUnwell || crisisClinical}
+          >
             Submit screening
           </button>
           <button type="button" className="btn tertiary" onClick={() => setHelpOpen(true)}>

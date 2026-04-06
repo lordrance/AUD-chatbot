@@ -1,13 +1,19 @@
-# Stage 1: recent drinking + motivation
+# Stage 1: recent drinking + motivation + 0–10 ratings (PDF)
 warm:
-  transition: "Thanks. Next we'll talk about situations where drinking tends to creep up."
-  stage_hint: "Clarify pattern and motivation to cut down; one open theme per turn; no lecturing or strategy stacking."
+  transition: "Thanks. Next we'll narrow in on one high-risk drinking situation and its details."
+  stage_hint: "One open theme per turn; include importance and confidence 0–10."
   slots:
-    recent_drinking: "Over the past week or two, what has your drinking looked like? (frequency, settings, or rough amount—whatever comes to mind.)"
-    reduce_motivation: "What matters most to you about drinking less—even one sentence is fine."
+    recent_pattern: "Over the past week or two, what did your drinking look like overall?"
+    most_concerning_episode: "Thinking recently, which time stood out as most concerning for you—and why?"
+    reason_to_cut_down: "What matters most to you about drinking less—even one sentence helps."
+    importance_rating_0_10: "From 0–10, how important is changing your drinking right now? (0 = not important, 10 = extremely.)"
+    confidence_rating_0_10: "From 0–10, how confident do you feel that you could make a change if you decided to?"
 neutral:
-  transition: "Next topic: drinking triggers and high-risk situations."
-  stage_hint: "Collect drinking pattern and motivation objectively; one follow-up point per turn."
+  transition: "Next topic: one high-risk situation—people, place, time, feelings, and cues."
+  stage_hint: "Objective collection; numeric slots must be 0–10."
   slots:
-    recent_drinking: "Briefly describe how often you drank and roughly how much over the past week or two (your own words)."
-    reduce_motivation: "In one sentence, what is your main reason for wanting to reduce drinking?"
+    recent_pattern: "Briefly describe your drinking pattern over the past week or two (frequency and rough amount)."
+    most_concerning_episode: "Which recent episode of drinking concerns you most? One sentence is enough."
+    reason_to_cut_down: "In one sentence, what is your main reason for wanting to reduce drinking?"
+    importance_rating_0_10: "Rate from 0 to 10 how important reducing drinking is for you right now."
+    confidence_rating_0_10: "Rate from 0 to 10 how confident you are that you could change your drinking if you chose to."

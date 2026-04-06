@@ -16,6 +16,8 @@ export function routeForStatus(status: string): string {
     case "chat_ready":
     case "chat_active":
       return "/chat";
+    case "stage1_feedback_pending":
+      return "/chat/stage1-feedback";
     case "post_survey_pending":
       return "/chat-summary";
     case "completed":
@@ -37,6 +39,7 @@ export function progressStepForPath(pathname: string): number {
   if (pathname === "/baseline") return 3;
   if (pathname === "/randomize") return 4;
   if (pathname === "/chat") return 5;
+  if (pathname === "/chat/stage1-feedback") return 5;
   if (pathname === "/chat-summary") return 6;
   if (pathname === "/post-survey") return 7;
   if (pathname === "/thank-you") return 8;

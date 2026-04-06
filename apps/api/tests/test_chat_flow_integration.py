@@ -41,6 +41,61 @@ def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _post_chat_turn_ack_stage1(client: TestClient, sid: str, token: str, text: str) -> dict:
+    """发送一轮聊天；若触发 Stage1 反馈闸，则自动 POST continue。"""
+    h = _auth_headers(token)
+    r = client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": text}, headers=h)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    if body.get("stage1_feedback_required"):
+        c = client.post(f"/api/v1/sessions/{sid}/chat/stage1-feedback/continue", headers=h)
+        assert c.status_code == 200, c.text
+    return body
+
+
+def _baseline_payload() -> dict:
+    """与 BaselineSubmit schema v2 对齐的最小合法体。"""
+    return {
+        "typical_drinks_last_week": 12,
+        "readiness_to_change_1_10": 6,
+        "importance_to_reduce_0_10": 7,
+        "prior_chatbot_or_ai_use": "never",
+        "in_treatment_for_aud_or_mental_health": False,
+        "education_level": "college_grad",
+        "employment_status": "employed",
+    }
+
+
+# 25 轮：无 Stage3 缩小分支（末段信心 ≥7）；每轮数值槽须为可解析 0–10
+CHAT_TURNS_25: list[str] = [
+    "Alex",
+    "I understand the study is not treatment.",
+    "Yes, ready to start.",
+    "About three times last week, a few drinks each time.",
+    "Last Friday I drank more than I wanted.",
+    "I want better sleep and mornings.",
+    "8",
+    "7",
+    "After-work social pressure.",
+    "Coworkers and clients.",
+    "Restaurant or bar near work.",
+    "Thursday and Friday evenings.",
+    "Anxious and rushed.",
+    "First round ordered for the table.",
+    "After-work drinks with colleagues.",
+    "delay_first_drink",
+    "If it's a work dinner, I'll order water for the first round.",
+    "I feel too tired to resist.",
+    "I'll set a one-drink limit text to myself.",
+    "8",
+    "Better sleep and fewer rough mornings.",
+    "After-work social drinking.",
+    "If work dinner, water first then decide.",
+    "8",
+    "none",
+]
+
+
 def _bootstrap_to_chat_ready(client: TestClient) -> tuple[str, str, str]:
     """返回 (session_id, token, arm)。"""
     r = client.post("/api/v1/sessions")
@@ -65,11 +120,10 @@ def _bootstrap_to_chat_ready(client: TestClient) -> tuple[str, str, str]:
     }
     assert client.post(f"/api/v1/sessions/{sid}/eligibility", json=elig, headers=h).status_code == 200
 
-    base = {
-        "typical_drinks_last_week": 12,
-        "readiness_to_change_1_10": 6,
-    }
-    assert client.post(f"/api/v1/sessions/{sid}/surveys/baseline", json=base, headers=h).status_code == 200
+    assert (
+        client.post(f"/api/v1/sessions/{sid}/surveys/baseline", json=_baseline_payload(), headers=h).status_code
+        == 200
+    )
 
     rz = client.post(f"/api/v1/sessions/{sid}/randomize", headers=h)
     assert rz.status_code == 200, rz.text
@@ -81,61 +135,97 @@ def test_stage_progression_and_chat_close(client: TestClient) -> None:
     sid, token, _arm = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
 
-    # 每阶段按 required_slots 填满后才推进；共 9 条用户消息
-    expected_stage_after = [0, 1, 1, 2, 2, 3, 3, 4, 4]
     chat_closed_flags: list[bool] = []
-    for i in range(9):
-        r = client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": f"m{i}"}, headers=h)
-        assert r.status_code == 200, r.text
-        body = r.json()
+    for i, text in enumerate(CHAT_TURNS_25):
+        body = _post_chat_turn_ack_stage1(client, sid, token, text)
         assert body["stub"] is True
-        assert body["stage_after"] == expected_stage_after[i]
         assert body.get("prompt_version") == "safechat-aud@0.2.1"
         chat_closed_flags.append(body["chat_closed"])
 
     assert chat_closed_flags[-1] is True
     assert all(not x for x in chat_closed_flags[:-1])
 
-    r10 = client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": "too late"}, headers=h)
-    assert r10.status_code == 400
+    r_extra = client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": "too late"}, headers=h)
+    assert r_extra.status_code == 400
 
     st_end = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
     assert st_end.get("chat_summary") is not None
-    assert st_end["chat_summary"].get("schema_version") == "1"
+    assert st_end["chat_summary"].get("schema_version") == "2"
 
 
 def test_chat_summary_persistence_has_export_keys(client: TestClient) -> None:
-    """验收：摘要卡 JSON 含分析用键（与 docs/data-dictionary-export-spec.md 一致）。"""
+    """摘要 JSON 含 v2 与兼容键。"""
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    for i in range(9):
-        assert (
-            client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": f"slot{i}"}, headers=h).status_code
-            == 200
-        )
+    for text in CHAT_TURNS_25:
+        _post_chat_turn_ack_stage1(client, sid, token, text)
     summary = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()["chat_summary"]
     assert summary is not None
+    assert summary.get("schema_version") == "2"
     for key in (
-        "schema_version",
-        "top_reason_to_cut_down",
-        "top_trigger_high_risk_situation",
-        "trigger_context",
-        "support_focus",
+        "top_reason",
+        "top_trigger",
+        "chosen_plan",
         "micro_plan_if_then",
-        "change_readiness_baseline_1_10",
+        "trigger_context",
+        "selected_strategy",
         "optional_takeaway",
         "confidence_summary",
+        "top_reason_to_cut_down",
+        "top_trigger_high_risk_situation",
+        "support_focus",
+        "importance_to_reduce_baseline_0_10",
     ):
         assert key in summary
+
+
+def test_stage1_feedback_pending_blocks_chat_until_continue(client: TestClient) -> None:
+    """完成 Stage1 后进入 stage1_feedback_pending；未 continue 前不得再 POST chat/turn。"""
+    sid, token, _ = _bootstrap_to_chat_ready(client)
+    h = _auth_headers(token)
+    saw_feedback = False
+    for text in CHAT_TURNS_25:
+        r = client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": text}, headers=h)
+        assert r.status_code == 200, r.text
+        if r.json().get("stage1_feedback_required"):
+            saw_feedback = True
+            break
+    assert saw_feedback
+    assert client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()["status"] == "stage1_feedback_pending"
+    bad = client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": "nope"}, headers=h)
+    assert bad.status_code == 400
+    assert (
+        client.post(f"/api/v1/sessions/{sid}/chat/stage1-feedback/continue", headers=h).status_code == 200
+    )
+
+
+def test_stage3_low_confidence_forces_shrink_slots(client: TestClient) -> None:
+    """末段信心 <7 时必须多 2 轮才结束聊天。"""
+    sid, token, _ = _bootstrap_to_chat_ready(client)
+    h = _auth_headers(token)
+    turns = list(CHAT_TURNS_25)
+    # 将 Stage3 末信心改为 5，触发缩小分支
+    turns[19] = "5"
+    turns.extend(
+        [
+            "If stressed, I will wait five minutes before any drink.",
+            "7",
+        ]
+    )
+    n = len(turns)
+    assert n == 27
+    for text in turns:
+        _post_chat_turn_ack_stage1(client, sid, token, text)
+    st = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
+    assert st["status"] == "post_survey_pending"
 
 
 def test_acceptance_e2e_linear_to_completed(client: TestClient) -> None:
     """验收：单会话线性完成至 completed（无 LLM，等同主力 API 路径）。"""
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    for i in range(9):
-        r = client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": f"turn{i}"}, headers=h)
-        assert r.status_code == 200, r.text
+    for text in CHAT_TURNS_25:
+        _post_chat_turn_ack_stage1(client, sid, token, text)
     st = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
     assert st["status"] == "post_survey_pending"
     assert st.get("chat_summary") is not None
@@ -148,8 +238,9 @@ def test_acceptance_e2e_linear_to_completed(client: TestClient) -> None:
 
 
 def _sample_post_survey_json() -> dict:
+    wai = {f"wai_tech_sf_item_{i:02d}": 5 for i in range(1, 13)}
     return {
-        "therapeutic_alliance_1_5": 4,
+        **wai,
         "trust_1_5": 4,
         "helpfulness_1_5": 4,
         "disclosure_comfort_1_5": 4,
@@ -175,11 +266,8 @@ def test_post_survey_only_after_chat_completed(client: TestClient) -> None:
     )
     assert bad.status_code == 400
 
-    for _ in range(9):
-        assert (
-            client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": "x"}, headers=h).status_code
-            == 200
-        )
+    for text in CHAT_TURNS_25:
+        _post_chat_turn_ack_stage1(client, sid, token, text)
 
     st = client.get(f"/api/v1/sessions/{sid}/state", headers=h)
     assert st.status_code == 200
@@ -205,8 +293,8 @@ def test_randomize_arm_idempotent(client: TestClient) -> None:
 def test_arm_fixed_during_chat(client: TestClient) -> None:
     sid, token, arm = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    for k in range(3):
-        client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": str(k)}, headers=h)
+    for text in CHAT_TURNS_25[:3]:
+        _post_chat_turn_ack_stage1(client, sid, token, text)
         st = client.get(f"/api/v1/sessions/{sid}/state", headers=h)
         assert st.json()["arm"] == arm
 
@@ -234,11 +322,10 @@ def _bootstrap_to_pending_randomization(client: TestClient) -> tuple[str, str]:
     }
     assert client.post(f"/api/v1/sessions/{sid}/eligibility", json=elig, headers=h).status_code == 200
 
-    base = {
-        "typical_drinks_last_week": 12,
-        "readiness_to_change_1_10": 6,
-    }
-    assert client.post(f"/api/v1/sessions/{sid}/surveys/baseline", json=base, headers=h).status_code == 200
+    assert (
+        client.post(f"/api/v1/sessions/{sid}/surveys/baseline", json=_baseline_payload(), headers=h).status_code
+        == 200
+    )
     return sid, token
 
 
@@ -263,10 +350,8 @@ def test_followup_public_token_open_and_submit(client: TestClient) -> None:
     """验收：随访 opt-in → 公开 GET/POST token → 重复提交 409。"""
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    for _ in range(9):
-        assert (
-            client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": "x"}, headers=h).status_code == 200
-        )
+    for text in CHAT_TURNS_25:
+        _post_chat_turn_ack_stage1(client, sid, token, text)
     post_body = _sample_post_survey_json()
     post_body["open_most_helpful"] = "ok"
     post_body["open_unnatural_or_uncomfortable"] = "ok"

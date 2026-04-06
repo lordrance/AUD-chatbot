@@ -11,10 +11,17 @@ def audit_c_threshold_for_sex(sex_at_birth: str) -> int:
 
 
 def evaluate_eligibility(body: EligibilitySubmit) -> EligibilityResult:
-    """根据年龄、AUDIT-C 总分阈值与减量意愿计算是否纳入及原因码列表。"""
+    """根据年龄、AUDIT-C 总分阈值、减量意愿与入组前安全筛查计算是否纳入及原因码列表。"""
     reasons: list[str] = []
     if body.age_years < 18:
         reasons.append("age_below_18")
+
+    if body.crisis_seeking_emergency_help_now:
+        reasons.append("crisis_seeking_emergency_help")
+    if body.crisis_unable_to_complete_severe_distress:
+        reasons.append("crisis_unable_to_complete")
+    if body.crisis_needs_immediate_medical_or_clinical:
+        reasons.append("crisis_needs_immediate_clinical")
 
     total = body.audit_c_frequency + body.audit_c_typical_quantity + body.audit_c_binge
     threshold = audit_c_threshold_for_sex(body.sex_at_birth)

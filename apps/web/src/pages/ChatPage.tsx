@@ -11,20 +11,42 @@ import { loadSession, routeForStatus } from "../flow";
 import { progressStepForPath } from "../flow";
 
 const MSG_KEY = (id: string) => `safechat_aud_msgs_${id}`;
+const PENDING_ASST_KEY = (id: string) => `safechat_aud_pending_asst_${id}`;
 
 const QUICK: Record<string, string[]> = {
+  "0:preferred_name": ["Alex", "Sam"],
   "0:orientation_ack": ["I understand", "I've read it—let's continue"],
-  "0:time_ok": ["Yes, this is a good time", "I'm free now"],
-  "1:recent_drinking": ["About three or four times last week", "It varied"],
-  "1:reduce_motivation": ["I want to drink less", "Mostly sleep and health"],
-  "2:main_trigger": ["Work or social events", "When I'm home alone"],
-  "2:trigger_context": ["Hard to say no", "It's how I unwind"],
-  "3:support_focus": ["Delay the first drink", "Switch to non-alcoholic options"],
-  "3:micro_plan_step": [
+  "0:ready_to_start": ["Yes, this is a good time", "I'm free now"],
+  "1:recent_pattern": ["About three or four times last week", "It varied"],
+  "1:most_concerning_episode": ["Last weekend I drank more than I wanted", "After work on Friday"],
+  "1:reason_to_cut_down": ["I want to drink less", "Mostly sleep and health"],
+  "1:importance_rating_0_10": ["7", "8"],
+  "1:confidence_rating_0_10": ["6", "7"],
+  "2:target_high_risk_situation": ["Work or social events", "When I'm home alone"],
+  "2:people": ["Coworkers", "I'm alone"],
+  "2:place": ["At home", "At a bar"],
+  "2:time": ["Friday evenings", "Late night"],
+  "2:emotion_or_internal_state": ["Stressed", "Bored"],
+  "2:cue_or_trigger": ["Seeing the bottle", "End of the workday"],
+  "3:selected_target_situation": ["Friday stress after work", "Social dinners"],
+  "3:selected_strategy": ["delay_first_drink", "alternate_with_water"],
+  "3:if_then_plan": [
+    "If it's Friday after work, I'll walk ten minutes before opening a drink.",
     "If there's a dinner out, I'll drink a glass of water first.",
-    "If I want a drink at home, I'll take a ten-minute walk first.",
   ],
-  "4:closing_ack": ["Nothing else", "Not right now"],
+  "3:obstacle": ["Too tired", "Hard to say no"],
+  "3:workaround": ["Set a phone reminder", "Leave early"],
+  "3:final_confidence_0_10": ["8", "5"],
+  "3:if_then_plan_revised": [
+    "If it's Friday, I'll delay the first drink by five minutes only.",
+    "If I want a drink, I'll pour water first and wait five minutes.",
+  ],
+  "3:final_confidence_0_10_after_shrink": ["8", "7"],
+  "4:top_reason": ["Sleep and health", "Family"],
+  "4:top_trigger": ["Friday stress", "Social events"],
+  "4:chosen_plan": ["If Friday, walk first then decide", "If dinner out, water first"],
+  "4:closing_confidence_0_10": ["8", "7"],
+  "4:optional_takeaway": ["none", "I'll try the smaller step"],
 };
 
 /** 将快捷语配置统一为字符串数组。 */
@@ -38,6 +60,9 @@ export function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [chatStage, setChatStage] = useState<number | null>(null);
+  const [chatSection, setChatSection] = useState<number | null>(null);
+  const [maxTurnsStage, setMaxTurnsStage] = useState<number | null>(null);
+  const [turnsInStage, setTurnsInStage] = useState<number | null>(null);
   const [substate, setSubstate] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -56,12 +81,22 @@ export function ChatPage() {
       navigate("/");
       return;
     }
+    let base: ChatMessage[] = [];
     try {
       const raw = localStorage.getItem(MSG_KEY(s.sessionId));
-      if (raw) setMessages(JSON.parse(raw) as ChatMessage[]);
+      if (raw) base = JSON.parse(raw) as ChatMessage[];
     } catch {
       /* ignore */
     }
+    const pk = PENDING_ASST_KEY(s.sessionId);
+    const pendingAsst = sessionStorage.getItem(pk);
+    if (pendingAsst) {
+      sessionStorage.removeItem(pk);
+      base = [...base, { role: "assistant", text: pendingAsst }];
+      localStorage.setItem(MSG_KEY(s.sessionId), JSON.stringify(base));
+    }
+    setMessages(base);
+
     api.getState(s.sessionId, s.token).then((st) => {
       if (st.status === "post_survey_pending") {
         navigate("/chat-summary");
@@ -71,11 +106,18 @@ export function ChatPage() {
         navigate("/safety-end?reason=emergency");
         return;
       }
+      if (st.status === "stage1_feedback_pending") {
+        navigate("/chat/stage1-feedback");
+        return;
+      }
       if (st.status !== "chat_ready" && st.status !== "chat_active") {
         navigate(routeForStatus(st.status));
         return;
       }
       setChatStage(st.chat_stage ?? st.current_stage ?? 0);
+      setChatSection(st.chat_section_1_to_4 ?? null);
+      setMaxTurnsStage(st.max_user_turns_current_stage ?? null);
+      setTurnsInStage(st.user_turns_in_current_stage ?? null);
       setSubstate(st.current_substate);
       setSafetyBanner(!!st.safety_show_resources_prompt);
     });
@@ -114,10 +156,17 @@ export function ChatPage() {
       }
       const st = await api.getState(s.sessionId, s.token);
       setChatStage(st.chat_stage ?? st.current_stage ?? res.stage_after);
+      setChatSection(st.chat_section_1_to_4 ?? null);
+      setMaxTurnsStage(st.max_user_turns_current_stage ?? null);
+      setTurnsInStage(st.user_turns_in_current_stage ?? null);
       setSubstate(st.current_substate);
       setSafetyBanner(!!st.safety_show_resources_prompt);
       if (res.safety_resources_suggested) {
         setHelpOpen(true);
+      }
+      if (res.stage1_feedback_required) {
+        navigate("/chat/stage1-feedback");
+        return;
       }
       if (res.chat_closed || st.post_survey_unlocked) {
         setDone(true);
@@ -136,7 +185,13 @@ export function ChatPage() {
 
   return (
     <>
-      <ProgressBar step={progressStepForPath("/chat")} chatStage={chatStage} />
+      <ProgressBar
+        step={progressStepForPath("/chat")}
+        chatStage={chatStage}
+        chatSectionOfFour={chatSection}
+        userTurnsInStage={turnsInStage}
+        maxUserTurnsStage={maxTurnsStage}
+      />
       <section className="card chat-card">
         <h2>Research chat</h2>
         {safetyBanner && (

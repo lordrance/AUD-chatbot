@@ -5,9 +5,9 @@ CONSENT_DOCUMENT_VERSION = "2026-04-04-v1"
 
 # 各 instrument 对应的问卷 schema 版本（写入 survey_responses.schema_version）
 SURVEY_SCHEMA_CONSENT = "1"
-SURVEY_SCHEMA_ELIGIBILITY = "1"
-SURVEY_SCHEMA_BASELINE = "1"
-SURVEY_SCHEMA_POST = "2"
+SURVEY_SCHEMA_ELIGIBILITY = "2"
+SURVEY_SCHEMA_BASELINE = "2"
+SURVEY_SCHEMA_POST = "3"
 SURVEY_SCHEMA_FOLLOWUP_7D = "1"
 
 # 默认提示词包版本（仅版本号；完整引用由 manifest.bundle_id 拼接）

@@ -6,11 +6,11 @@
 
 | Stage | 主题 | 提示词文件 | 必须填满的槽位（按顺序） |
 |-------|------|------------|---------------------------|
-| 0 | 说明与就绪 | `stage_0_onboarding.yaml` | `orientation_ack`, `time_ok` |
-| 1 | 近期饮酒与动机 | `stage_1_assess.yaml` | `recent_drinking`, `reduce_motivation` |
-| 2 | 触发情境 | `stage_2_triggers.yaml` | `main_trigger`, `trigger_context` |
-| 3 | 支持焦点与微计划 | `stage_3_plan.yaml` | `support_focus`, `micro_plan_step` |
-| 4 | 收尾确认 | `stage_4_close.yaml` | `closing_ack` |
+| 0 | 说明与就绪 | `stage_0_onboarding.yaml` | `preferred_name`, `orientation_ack`, `ready_to_start` |
+| 1 | 近期饮酒与动机 + 0–10 | `stage_1_assess.yaml` | `recent_pattern`, `most_concerning_episode`, `reason_to_cut_down`, `importance_rating_0_10`, `confidence_rating_0_10` |
+| 2 | 高风险情境细化 | `stage_2_triggers.yaml` | `target_high_risk_situation`, `people`, `place`, `time`, `emotion_or_internal_state`, `cue_or_trigger` |
+| 3 | 策略与 if–then 计划 | `stage_3_plan.yaml` | `selected_target_situation`, `selected_strategy`, `if_then_plan`, `obstacle`, `workaround`, `final_confidence_0_10`；若 `final_confidence_0_10` 为有效整数且 **&lt;7**，服务端再要求 `if_then_plan_revised`、`final_confidence_0_10_after_shrink` |
+| 4 | 摘要卡字段 | `stage_4_close.yaml` | `top_reason`, `top_trigger`, `chosen_plan`, `closing_confidence_0_10`, `optional_takeaway` |
 
 ## 存储格式
 
@@ -20,7 +20,7 @@
 ## 与「任务 1」的对应关系
 
 - **Stage 1 / 2 怎么问**：见 `prompts/stage_1_assess.yaml`、`prompts/stage_2_triggers.yaml`（及 `bundles/` 下各版本快照）。
-- **收集哪些信息**：上表槽位即最小必要信息集；与 `eval/personas.yaml` 中每条 persona 的 9 轮 `user_turns` 顺序一致（阶段 0 两槽 + 阶段 1–4 各两槽，阶段 4 仅一槽，共 9 条用户消息）。
+- **收集哪些信息**：上表槽位即最小必要信息集；**基础路径共 25 条用户消息**（每槽一轮）。Stage 3 若首次信心 &lt;7，再 **+2** 轮。`eval/run_batch.py` 在 persona 的 `user_turns` 条数不符时可回退到内置默认序列。
 
 ## 与策略库的关系
 

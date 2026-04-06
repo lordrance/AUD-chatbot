@@ -63,6 +63,11 @@ def _to_pending_randomize_with_concern(client: TestClient, concern: str | None) 
     base = {
         "typical_drinks_last_week": 12,
         "readiness_to_change_1_10": 6,
+        "importance_to_reduce_0_10": 7,
+        "prior_chatbot_or_ai_use": "never",
+        "in_treatment_for_aud_or_mental_health": False,
+        "education_level": "college_grad",
+        "employment_status": "employed",
     }
     if concern is not None:
         base["primary_concern_short"] = concern
@@ -108,7 +113,7 @@ def test_in_chat_severity2_ends_to_post_survey_pending(client: TestClient) -> No
     st = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
     assert st["post_survey_unlocked"] is True
     assert st.get("chat_summary") is not None
-    assert st["chat_summary"].get("schema_version") == "1"
+    assert st["chat_summary"].get("schema_version") == "2"
 
 
 def test_in_chat_severity3_abandoned(client: TestClient) -> None:

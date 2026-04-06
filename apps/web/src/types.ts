@@ -29,6 +29,10 @@ export interface SessionState {
   safety_chat_permitted?: boolean;
   /** 服务端 chat_summary_json 的解析结果 */
   chat_summary?: Record<string, unknown> | null;
+  /** 聊天四段进度 1–4（Stage3–4 合并为第 4 段） */
+  chat_section_1_to_4?: number | null;
+  max_user_turns_current_stage?: number | null;
+  stage1_feedback_card?: Record<string, unknown> | null;
 }
 
 /** 浏览器中展示的一条聊天消息。 */

@@ -8,6 +8,7 @@ import { EligibilityPage } from "./pages/EligibilityPage";
 import { BaselinePage } from "./pages/BaselinePage";
 import { RandomizePage } from "./pages/RandomizePage";
 import { ChatPage } from "./pages/ChatPage";
+import { Stage1FeedbackPage } from "./pages/Stage1FeedbackPage";
 import { PostSurveyPage } from "./pages/PostSurveyPage";
 import { ThankYouPage } from "./pages/ThankYouPage";
 import { IneligiblePage } from "./pages/IneligiblePage";
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/baseline" element={<BaselinePage />} />
           <Route path="/randomize" element={<RandomizePage />} />
           <Route path="/chat" element={<ChatPage />} />
+          <Route path="/chat/stage1-feedback" element={<Stage1FeedbackPage />} />
           <Route path="/chat-summary" element={<ChatSummaryPage />} />
           <Route path="/post-survey" element={<PostSurveyPage />} />
           <Route path="/follow-up/:token" element={<FollowUpPage />} />

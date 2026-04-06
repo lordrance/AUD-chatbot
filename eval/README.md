@@ -82,7 +82,7 @@ apps/api/.venv/Scripts/python.exe eval/summarize_smoke_batch.py --batch-dir eval
 
 ## Persona 包
 
-`personas.yaml` 含 15 个模拟用户；每人恰好 **9 条** `user_turns`，顺序与 `chat_fsm.REQUIRED_SLOTS_BY_STAGE` 一致。修改后可直接重跑批量脚本做回归。
+`personas.yaml` 含 15 个模拟用户。当前主 FSM 需要 **25 条** `user_turns`（Stage 3 若信心 &lt;7 另 +2 条）；若 persona 条数不符，`run_batch.py` 会回退到内置默认序列并打印警告。顺序须与 `chat_fsm.REQUIRED_SLOTS_BY_STAGE` 一致。
 
 ## 相关代码
 

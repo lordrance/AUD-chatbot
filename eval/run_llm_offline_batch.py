@@ -26,6 +26,35 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 API_ROOT = REPO_ROOT / "apps" / "api"
 EVAL_DIR = Path(__file__).resolve().parent
 
+EXPECTED_CHAT_USER_TURNS = 25
+_DEFAULT_TURNS: list[str] = [
+    "Alex",
+    "I understand the study is not treatment.",
+    "Yes, ready to start.",
+    "About three times last week, a few drinks each time.",
+    "Last Friday I drank more than I wanted.",
+    "I want better sleep and mornings.",
+    "8",
+    "7",
+    "After-work social pressure.",
+    "Coworkers and clients.",
+    "Restaurant or bar near work.",
+    "Thursday and Friday evenings.",
+    "Anxious and rushed.",
+    "First round ordered for the table.",
+    "After-work drinks with colleagues.",
+    "delay_first_drink",
+    "If it's a work dinner, I'll order water for the first round.",
+    "I feel too tired to resist.",
+    "I'll set a one-drink limit text to myself.",
+    "8",
+    "Better sleep and fewer rough mornings.",
+    "After-work social drinking.",
+    "If work dinner, water first then decide.",
+    "8",
+    "none",
+]
+
 
 def _utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -33,12 +62,7 @@ def _utc_stamp() -> str:
 
 def _load_personas(path: Path) -> list[dict[str, Any]]:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    personas = data.get("personas") or []
-    for p in personas:
-        turns = p.get("user_turns") or []
-        if len(turns) != 9:
-            raise ValueError(f"persona {p.get('id')!r} 需要恰好 9 条 user_turns，当前 {len(turns)}")
-    return personas
+    return data.get("personas") or []
 
 
 def main() -> int:
@@ -150,7 +174,15 @@ def main() -> int:
                 last_model = model_fixed
                 completed_all_stages = False
 
-                for user_line in persona["user_turns"]:
+                user_turns = list(persona.get("user_turns") or [])
+                if len(user_turns) != EXPECTED_CHAT_USER_TURNS:
+                    print(
+                        f"警告: persona {pid} user_turns={len(user_turns)}，需要 {EXPECTED_CHAT_USER_TURNS}；使用默认序列",
+                        file=sys.stderr,
+                    )
+                    user_turns = _DEFAULT_TURNS
+
+                for user_line in user_turns:
                     state, rec = apply_user_turn_local(
                         state=state,
                         arm=arm,

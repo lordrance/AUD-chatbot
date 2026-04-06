@@ -1,5 +1,5 @@
 /**
- * 后测页：Likert 量表与两道开放题，提交后跳转致谢页。
+ * 后测页：WAI-TECH-SF（12 项 1–7）、过程量表、操纵检验与两道开放题。
  */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -47,13 +47,102 @@ function Likert5({
   );
 }
 
-/** Likert 默认值（中性）。 */
+/** WAI-TECH-SF：1–7（1 = never, 7 = always）。 */
+function Likert7({
+  fieldId,
+  label,
+  value,
+  onChange,
+}: {
+  fieldId: string;
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <fieldset className="likert">
+      <legend>{label}</legend>
+      <div className="likert-scale">
+        <span className="muted small">1 Never</span>
+        {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+          <label key={n} className="likert-opt">
+            <input
+              type="radio"
+              name={fieldId}
+              checked={value === n}
+              onChange={() => onChange(n)}
+            />
+            {n}
+          </label>
+        ))}
+        <span className="muted small">7 Always</span>
+      </div>
+    </fieldset>
+  );
+}
+
+/** WAI-TECH-SF 条目（程序措辞与原文一致，将 “program” 落实为 “this text-based program”）。来源：PMC7503297，CC BY 4.0。 */
+const WAI_ITEMS: { id: string; text: string }[] = [
+  {
+    id: "wai_tech_sf_item_01",
+    text: "As a result of these sessions using this text-based program, I am clearer as to how I might be able to change.",
+  },
+  {
+    id: "wai_tech_sf_item_02",
+    text: "What I am doing with this text-based program gives me new ways of looking at my problem.",
+  },
+  {
+    id: "wai_tech_sf_item_03",
+    text: "I believe that I am a good candidate for this text-based program.",
+  },
+  {
+    id: "wai_tech_sf_item_04",
+    text: "This text-based program and I collaborate on setting goals for my therapy.",
+  },
+  {
+    id: "wai_tech_sf_item_05",
+    text: "This text-based program and I respect each other.",
+  },
+  {
+    id: "wai_tech_sf_item_06",
+    text: "This text-based program and I are working towards mutually agreed upon goals.",
+  },
+  {
+    id: "wai_tech_sf_item_07",
+    text: "I feel that this text-based program appreciates me.",
+  },
+  {
+    id: "wai_tech_sf_item_08",
+    text: "This text-based program and I agree on what is important for me to work on.",
+  },
+  {
+    id: "wai_tech_sf_item_09",
+    text: "I feel this text-based program cares about me even when I do things that it does not approve of.",
+  },
+  {
+    id: "wai_tech_sf_item_10",
+    text: "I feel that the things I do with this text-based program will help me to accomplish the changes that I want.",
+  },
+  {
+    id: "wai_tech_sf_item_11",
+    text: "This text-based program and I have established a good understanding of the kind of changes that would be good for me.",
+  },
+  {
+    id: "wai_tech_sf_item_12",
+    text: "I believe the way that this text-based program and I are working with my problem is correct.",
+  },
+];
+
+function initialWai(): Record<string, number> {
+  return Object.fromEntries(WAI_ITEMS.map((x) => [x.id, 4]));
+}
+
 const init5 = () => 3;
 
 /** 后测表单与校验提交。 */
 export function PostSurveyPage() {
   const navigate = useNavigate();
-  const [therapeutic, setTherapeutic] = useState(init5);
+  const [wai, setWai] = useState(initialWai);
   const [trust, setTrust] = useState(init5);
   const [helpful, setHelpful] = useState(init5);
   const [disc, setDisc] = useState(init5);
@@ -101,7 +190,7 @@ export function PostSurveyPage() {
     setErr(null);
     try {
       await api.postPostSurvey(s.sessionId, s.token, {
-        therapeutic_alliance_1_5: therapeutic,
+        ...wai,
         trust_1_5: trust,
         helpfulness_1_5: helpful,
         disclosure_comfort_1_5: disc,
@@ -128,18 +217,26 @@ export function PostSurveyPage() {
       <section className="card form-long">
         <h2>Post-survey</h2>
         <p className="muted small">
-          Answer based on how you felt during this chat. Items are 1–5: 1 = strongly disagree / does not apply at all, 5
-          = strongly agree / applies very much. For the “repetitive” item, 5 means very repetitive/scripted.
+          Answer based on how you felt during this chat. Process and manipulation-check items use 1–5 (1 = strongly
+          disagree / does not apply, 5 = strongly agree). For the “repetitive” item, 5 means very repetitive/scripted.
         </p>
 
-        <Likert5
-          fieldId="therapeutic_alliance"
-          label="I felt we built a good working relationship with this text program (digital therapeutic alliance)."
-          value={therapeutic}
-          onChange={setTherapeutic}
-          left="Strongly disagree"
-          right="Strongly agree"
-        />
+        <h3 className="h3">Working alliance with the text program (WAI-TECH-SF)</h3>
+        <p className="muted small">
+          The following 12 items use a 7-point scale: 1 = never, 7 = always. (WAI-TECH-SF: Gómez Penedo et al., 2020,
+          adapted from the Working Alliance Inventory—Short Form; open access via PMC7503297.)
+        </p>
+        {WAI_ITEMS.map((item, i) => (
+          <Likert7
+            key={item.id}
+            fieldId={item.id}
+            label={`${i + 1}. ${item.text}`}
+            value={wai[item.id] ?? 4}
+            onChange={(v) => setWai((prev) => ({ ...prev, [item.id]: v }))}
+          />
+        ))}
+
+        <h3 className="h3">Other process measures (1–5)</h3>
         <Likert5
           fieldId="trust"
           label="I trusted the information and process in this conversation."

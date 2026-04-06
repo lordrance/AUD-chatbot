@@ -53,35 +53,151 @@ def _slot_from_bundle(bundle: PromptBundle, arm: str, stage: int, slot: str) -> 
     return str(v) if v else None
 
 
+# (warm_text, neutral_text) — PDF 对齐槽位英文回退
+_SLOT_FALLBACK_PAIR: dict[tuple[int, str], tuple[str, str]] = {
+    (0, "preferred_name"): (
+        "What should we call you? A first name or nickname is fine.",
+        "Please enter your preferred name or nickname for this session.",
+    ),
+    (0, "orientation_ack"): (
+        "Thanks for joining. This is about 20–25 minutes of text for research—not treatment or crisis care. "
+        "In one short sentence, please confirm you understand.",
+        "This is a ~20–25 minute research chat (text only; not treatment or crisis support). "
+        "Please confirm you understand.",
+    ),
+    (0, "ready_to_start"): (
+        "Are you ready to begin now? (If not, a brief note is fine.)",
+        "Please confirm you are ready to start now (yes/no or a short note).",
+    ),
+    (1, "recent_pattern"): (
+        "Over the past week or two, what did your drinking look like overall?",
+        "Briefly describe your drinking pattern over the past week or two (frequency and rough amount).",
+    ),
+    (1, "most_concerning_episode"): (
+        "Thinking recently, which time stood out as most concerning for you—and why?",
+        "Which recent episode of drinking concerns you most? One sentence is enough.",
+    ),
+    (1, "reason_to_cut_down"): (
+        "What matters most to you about drinking less—even one sentence helps.",
+        "In one sentence, what is your main reason for wanting to reduce drinking?",
+    ),
+    (1, "importance_rating_0_10"): (
+        "From 0–10, how important is changing your drinking right now? (0 = not important, 10 = extremely.)",
+        "Rate from 0 to 10 how important reducing drinking is for you right now.",
+    ),
+    (1, "confidence_rating_0_10"): (
+        "From 0–10, how confident do you feel that you could make a change if you decided to? "
+        "(0 = not confident, 10 = very confident.)",
+        "Rate from 0 to 10 how confident you are that you could change your drinking if you chose to.",
+    ),
+    (2, "target_high_risk_situation"): (
+        "Which situation most often pulls you toward drinking more than you want? Pick one priority.",
+        "Name the single highest-risk drinking situation you want to focus on.",
+    ),
+    (2, "people"): (
+        "Who is usually around in that situation (or who matters there)? Short answer is fine.",
+        "Who is typically present or relevant in that situation?",
+    ),
+    (2, "place"): (
+        "Where does it usually happen?",
+        "Where does this situation usually take place?",
+    ),
+    (2, "time"): (
+        "What time of day or week does it tend to happen?",
+        "When does this situation tend to occur (time of day, day of week, etc.)?",
+    ),
+    (2, "emotion_or_internal_state"): (
+        "What do you tend to feel right before drinking in that moment?",
+        "What emotions or internal state show up right before you drink there?",
+    ),
+    (2, "cue_or_trigger"): (
+        "What is the clearest cue that makes picking up a drink most likely?",
+        "What cue or trigger most strongly leads to drinking in that situation?",
+    ),
+    (3, "selected_target_situation"): (
+        "Let's lock one situation: in your own words, which situation are we planning for?",
+        "Confirm the one situation this plan will target (one short phrase).",
+    ),
+    (3, "selected_strategy"): (
+        "From the strategy ideas we discussed, which one do you want to try first (or your own short label)?",
+        "Name one strategy you will try (e.g., delay first drink, alternate with water—your wording).",
+    ),
+    (3, "if_then_plan"): (
+        'Write one if–then plan: "If [trigger], then [small action I will take]."',
+        'Give one sentence in "If …, then …" format for your smallest doable step.',
+    ),
+    (3, "obstacle"): (
+        "What is the main obstacle that could get in the way?",
+        "What obstacle might make this plan hard?",
+    ),
+    (3, "workaround"): (
+        "What small workaround could help if that obstacle shows up?",
+        "What backup tweak could help you stick with the plan?",
+    ),
+    (3, "final_confidence_0_10"): (
+        "From 0–10, how confident are you that you can carry out this plan in the next few days?",
+        "Rate 0–10 how confident you are you can follow this plan soon.",
+    ),
+    (3, "if_then_plan_revised"): (
+        "You rated confidence below 7. Please offer a smaller, easier if–then plan—one tiny step only.",
+        "Confidence was under 7. Please rewrite a smaller if–then plan that feels more doable.",
+    ),
+    (3, "final_confidence_0_10_after_shrink"): (
+        "After shrinking the plan, what is your confidence now from 0–10?",
+        "Rate 0–10 how confident you are in this revised smaller plan.",
+    ),
+    (4, "top_reason"): (
+        "To close: in one line, what is your top reason for cutting down?",
+        "State your main reason to reduce drinking (one line).",
+    ),
+    (4, "top_trigger"): (
+        "In one line, what is the main trigger situation you focused on?",
+        "State the main high-risk situation in one line.",
+    ),
+    (4, "chosen_plan"): (
+        "In one line, restate your if–then plan.",
+        "Restate your chosen if–then plan in one line.",
+    ),
+    (4, "closing_confidence_0_10"): (
+        "From 0–10, how confident are you in this plan as you leave the chat?",
+        "Rate 0–10 your confidence in this plan right now.",
+    ),
+    (4, "optional_takeaway"): (
+        "Anything else you want to note? If nothing, reply \"none\".",
+        "Optional: anything else to add? If not, reply \"none\".",
+    ),
+}
+
+
 def _transition_line_fallback(arm: str, stage: int) -> str:
     """YAML 缺失时的阶段过渡英文回退文案。"""
     w = _warm_neutral(arm)
     if stage == 0:
         return (
-            "Thanks. Next, I'd like to learn about your drinking over the past week."
+            "Thanks. Next we'll look at your recent drinking pattern and what you want to change."
             if w
-            else "Next section: drinking over the past week."
+            else "Next: recent drinking pattern, a concerning episode, and your reasons to cut down."
         )
     if stage == 1:
         return (
-            "Thanks. Next, let's talk about situations where drinking tends to get heavier."
+            "Thanks. Next we'll narrow in on one high-risk drinking situation and its details."
             if w
-            else "Next topic: high-risk drinking situations."
+            else "Next topic: one high-risk situation—people, place, time, feelings, and cues."
         )
     if stage == 2:
         return (
-            "Got it. Let's make a very short coping plan."
+            "Got it. Next we'll pick a strategy and shape a very small if–then plan."
             if w
-            else "Next section: a brief coping plan."
+            else "Next: brief support—choose a strategy and write one if–then micro-plan."
         )
     if stage == 3:
         return (
-            "Great. Let's wrap up and close today's conversation."
+            "Great. Let's summarize and close so you can move to the post-survey."
             if w
-            else "Summary and close."
+            else "Closing: confirm your summary lines, then the post-survey."
         )
     return (
-        "Thank you for taking part. Please continue with the short post-survey questions. We'll stop here for now."
+        "Thank you for taking part. Please continue with the short post-survey."
         if w
         else "Thank you. Please complete the post-survey."
     )
@@ -90,61 +206,9 @@ def _transition_line_fallback(arm: str, stage: int) -> str:
 def _slot_question_fallback(arm: str, stage: int, slot: str) -> str:
     """YAML 缺失时按阶段/槽位的英文追问回退。"""
     w = _warm_neutral(arm)
-    if stage == 0 and slot == "orientation_ack":
-        return (
-            "Thanks for your time today. This will take about 20–25 minutes and is text-only. "
-            "Please reply briefly to confirm you understand."
-            if w
-            else "About 20–25 minutes, text-only. Please confirm you understand."
-        )
-    if stage == 0 and slot == "time_ok":
-        return (
-            "Is now a good time to continue? (Either way is fine—say what works for you.)"
-            if w
-            else "Please confirm whether now is a good time to continue."
-        )
-    if stage == 1 and slot == "recent_drinking":
-        return (
-            "Roughly how often did you drink in the past week, and about how much each time (standard drinks)?"
-            if w
-            else "Briefly describe how often you drank in the past week and roughly how much."
-        )
-    if stage == 1 and slot == "reduce_motivation":
-        return (
-            "What is the one small thing you most want to change right now?"
-            if w
-            else "In one sentence, what is your main reason for wanting to drink less?"
-        )
-    if stage == 2 and slot == "main_trigger":
-        return (
-            "Which situation most often leads you to drink more than you want?"
-            if w
-            else "Name the main drinking trigger situation."
-        )
-    if stage == 2 and slot == "trigger_context":
-        return (
-            "What usually happens in that situation? (One sentence is enough.)"
-            if w
-            else "Add a short detail about that situation."
-        )
-    if stage == 3 and slot == "support_focus":
-        return (
-            "Today, what single point do you most want support on?"
-            if w
-            else "Name one concrete point where you need support."
-        )
-    if stage == 3 and slot == "micro_plan_step":
-        return (
-            "For that situation, what is one very small step you could try?"
-            if w
-            else "Give one actionable small step."
-        )
-    if stage == 4 and slot == "closing_ack":
-        return (
-            "Anything else to add? If not, reply \"none\"."
-            if w
-            else "Anything to add? If not, reply \"none\"."
-        )
+    pair = _SLOT_FALLBACK_PAIR.get((stage, slot))
+    if pair:
+        return pair[0] if w else pair[1]
     return "Please keep your reply brief." if w else "Please reply."
 
 

@@ -1,13 +1,15 @@
-# Stage 0: orientation / readiness
+# Stage 0: onboarding / PDF preferred name + study orientation + ready to start
 warm:
-  transition: "Good. Next we'll look at your drinking over roughly the last week or two."
-  stage_hint: "Explain study nature and length; no alcohol education or diagnosis; collect orientation_ack and time_ok only."
+  transition: "Good. Next we'll talk about your recent drinking and what you want to change."
+  stage_hint: "Collect name, study disclaimer acknowledgment, readiness; no therapy tone."
   slots:
-    orientation_ack: "Thanks for participating. This is about 20–25 minutes of text chat for research (not treatment, not crisis care). In one short sentence, please confirm you understand."
-    time_ok: "Is it okay to continue now? If not, you can say so briefly."
+    preferred_name: "What should we call you? A first name or nickname is fine."
+    orientation_ack: "Thanks for joining. This is about 20–25 minutes of text for research—not treatment or crisis care. In one short sentence, please confirm you understand."
+    ready_to_start: "Are you ready to begin now? (If not, a brief note is fine.)"
 neutral:
-  transition: "Next, we'll cover drinking frequency and approximate amount over the past week."
-  stage_hint: "State duration and format; avoid implying clinical care; single confirmation question."
+  transition: "Next: recent drinking pattern, a concerning episode, and reasons to cut down."
+  stage_hint: "Name, confirm understanding, readiness; factual wording."
   slots:
-    orientation_ack: "This is a ~20–25 minute research conversation, text only. Please confirm you have read and understood the above."
-    time_ok: "Please confirm whether you can continue now (yes/no with a brief note is fine)."
+    preferred_name: "Please enter your preferred name or nickname for this session."
+    orientation_ack: "This is a ~20–25 minute research chat (text only; not treatment or crisis support). Please confirm you understand."
+    ready_to_start: "Please confirm you are ready to start now (yes/no or a short note)."

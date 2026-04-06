@@ -27,6 +27,36 @@ sys.path.insert(0, str(EVAL_DIR))
 
 from heuristics import analyze_run  # noqa: E402
 
+# 与当前 FSM 必填槽位数一致（PDF 扩展后 25 轮）；persona user_turns 长度不符时回退到此序列
+EXPECTED_CHAT_USER_TURNS = 25
+DEFAULT_CHAT_USER_TURNS: list[str] = [
+    "Alex",
+    "I understand the study is not treatment.",
+    "Yes, ready to start.",
+    "About three times last week, a few drinks each time.",
+    "Last Friday I drank more than I wanted.",
+    "I want better sleep and mornings.",
+    "8",
+    "7",
+    "After-work social pressure.",
+    "Coworkers and clients.",
+    "Restaurant or bar near work.",
+    "Thursday and Friday evenings.",
+    "Anxious and rushed.",
+    "First round ordered for the table.",
+    "After-work drinks with colleagues.",
+    "delay_first_drink",
+    "If it's a work dinner, I'll order water for the first round.",
+    "I feel too tired to resist.",
+    "I'll set a one-drink limit text to myself.",
+    "8",
+    "Better sleep and fewer rough mornings.",
+    "After-work social drinking.",
+    "If work dinner, water first then decide.",
+    "8",
+    "none",
+]
+
 
 def _utc_run_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -62,6 +92,11 @@ def _bootstrap_session(client: Any, consent_version: str) -> tuple[str, str]:
     base = {
         "typical_drinks_last_week": 12,
         "readiness_to_change_1_10": 6,
+        "importance_to_reduce_0_10": 7,
+        "prior_chatbot_or_ai_use": "never",
+        "in_treatment_for_aud_or_mental_health": False,
+        "education_level": "college_grad",
+        "employment_status": "employed",
     }
     assert client.post(f"/api/v1/sessions/{sid}/surveys/baseline", json=base, headers=h).status_code == 200
 
@@ -85,12 +120,7 @@ def _randomize_forced(client: Any, settings_mod: Any, sid: str, token: str, arm:
 
 def _load_personas(path: Path) -> list[dict[str, Any]]:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    personas = data.get("personas") or []
-    for p in personas:
-        turns = p.get("user_turns") or []
-        if len(turns) != 9:
-            raise ValueError(f"persona {p.get('id')!r} 需要恰好 9 条 user_turns，当前 {len(turns)}")
-    return personas
+    return data.get("personas") or []
 
 
 def _count_llm_metrics(db: Any, session_uuid: uuid.UUID) -> tuple[int, int, str | None]:
@@ -256,7 +286,15 @@ def main() -> int:
                 last_prompt_version: str | None = None
                 completed_all_stages = False
 
-                for user_line in persona["user_turns"]:
+                user_turns = list(persona.get("user_turns") or [])
+                if len(user_turns) != EXPECTED_CHAT_USER_TURNS:
+                    print(
+                        f"警告: persona {pid} user_turns={len(user_turns)}，需要 {EXPECTED_CHAT_USER_TURNS}；使用默认序列",
+                        file=sys.stderr,
+                    )
+                    user_turns = DEFAULT_CHAT_USER_TURNS
+
+                for user_line in user_turns:
                     r = client.post(
                         f"/api/v1/sessions/{sid_str}/chat/turn",
                         json={"text": user_line},

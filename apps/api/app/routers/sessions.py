@@ -41,12 +41,15 @@ from app.schemas.flow import (
     PostSurveySubmit,
     RandomizeOkResponse,
     SessionStateResponse,
+    Stage1FeedbackContinueResponse,
 )
 from app.services.chat_summary import persist_chat_summary
 from app.services.chat_fsm import (
     first_missing_slot,
     initial_current_substate,
+    max_user_turns_for_stage,
     next_stage_after_completion,
+    pad_incomplete_stage_with_cap_marker,
     qualified_slot_key,
     stage_slots_complete,
 )
@@ -89,6 +92,7 @@ def _next_step(status_value: str) -> str:
         "pending_randomization": "randomize",
         "chat_ready": "chat",
         "chat_active": "chat",
+        "stage1_feedback_pending": "stage1_feedback",
         "post_survey_pending": "post_survey",
         "completed": "done",
         "ineligible": "end",
@@ -119,16 +123,74 @@ def _ineligible_summary_for_state(row: SessionRecord) -> str | None:
 
 def _chat_stage_for_api(row: SessionRecord) -> int | None:
     """对外展示的聊天阶段号；未进入或已结束聊天时规则见内部分支。"""
-    if row.status in ("chat_ready", "chat_active", "post_survey_pending"):
+    if row.status in ("chat_ready", "chat_active", "stage1_feedback_pending", "post_survey_pending"):
         return row.fsm_stage
     if row.status == "completed":
         return 4
     return None
 
 
+def _chat_section_1_to_4(row: SessionRecord) -> int | None:
+    """聊天子进度 1/4–4/4：0→1、1→2、2→3、3 与 4→4；Stage1 反馈卡暂停时仍显示 2/4。"""
+    if not row.arm:
+        return None
+    if row.status == "stage1_feedback_pending":
+        return 2
+    if row.status in ("chat_ready", "chat_active"):
+        fs = row.fsm_stage
+        if fs <= 0:
+            return 1
+        if fs == 1:
+            return 2
+        if fs == 2:
+            return 3
+        return 4
+    if row.status in ("post_survey_pending", "completed"):
+        return 4
+    return None
+
+
+def _max_user_turns_current_stage(row: SessionRecord) -> int | None:
+    if row.status not in ("chat_ready", "chat_active"):
+        return None
+    return max_user_turns_for_stage(row.fsm_stage)
+
+
+def _stage1_feedback_card_payload(db: OrmSession, row: SessionRecord) -> dict[str, Any] | None:
+    if row.status != "stage1_feedback_pending":
+        return None
+    q = select(SurveyResponse).where(
+        SurveyResponse.session_id == row.id,
+        SurveyResponse.instrument == "baseline",
+    )
+    br = db.scalars(q).first()
+    drinks: Any = None
+    if br and isinstance(br.answers, dict):
+        drinks = br.answers.get("typical_drinks_last_week")
+    slots = dict(row.slot_json or {})
+    keys = (
+        "1:recent_pattern",
+        "1:most_concerning_episode",
+        "1:reason_to_cut_down",
+        "1:importance_rating_0_10",
+        "1:confidence_rating_0_10",
+    )
+    stage1 = {k.split(":", 1)[1]: slots.get(k) for k in keys}
+    return {
+        "typical_drinks_last_week_baseline": drinks,
+        "stage1_slots": stage1,
+    }
+
+
 def _slot_snapshot_for_api(row: SessionRecord) -> tuple[str | None, dict[str, Any] | None, str | None]:
     """返回 (current_substate, slot_json, rolling_summary 截断) 供 state 接口；不适用时全 None。"""
-    if row.status not in ("chat_ready", "chat_active", "post_survey_pending", "completed") or not row.arm:
+    if row.status not in (
+        "chat_ready",
+        "chat_active",
+        "stage1_feedback_pending",
+        "post_survey_pending",
+        "completed",
+    ) or not row.arm:
         return None, None, None
     summary = row.rolling_summary or ""
     if len(summary) > 8000:
@@ -136,7 +198,7 @@ def _slot_snapshot_for_api(row: SessionRecord) -> tuple[str | None, dict[str, An
     return row.current_substate, dict(row.slot_json or {}), summary
 
 
-def _state_response(row: SessionRecord) -> SessionStateResponse:
+def _state_response(db: OrmSession, row: SessionRecord) -> SessionStateResponse:
     """由 ORM 会话行组装 GET state 的响应体。"""
     cs = _chat_stage_for_api(row)
     chat_open = row.status in ("chat_ready", "chat_active")
@@ -151,6 +213,7 @@ def _state_response(row: SessionRecord) -> SessionStateResponse:
     sev = int(row.safety_max_severity or 0)
     safety_show = sev >= 1 and row.status not in ("abandoned", "completed", "ineligible")
     safety_chat_ok = row.status in ("chat_ready", "chat_active")
+    s1_card = _stage1_feedback_card_payload(db, row)
     return SessionStateResponse(
         session_id=row.id,
         status=row.status,
@@ -176,6 +239,9 @@ def _state_response(row: SessionRecord) -> SessionStateResponse:
         safety_show_resources_prompt=safety_show,
         safety_chat_permitted=safety_chat_ok,
         chat_summary=dict(row.chat_summary_json) if isinstance(row.chat_summary_json, dict) else None,
+        chat_section_1_to_4=_chat_section_1_to_4(row),
+        max_user_turns_current_stage=_max_user_turns_current_stage(row),
+        stage1_feedback_card=s1_card,
     )
 
 
@@ -237,7 +303,7 @@ def get_state(
     _touch_activity(row)
     db.add(row)
     db.commit()
-    return _state_response(row)
+    return _state_response(db, row)
 
 
 @router.post("/{session_id}/consent", response_model=ConsentOkResponse)
@@ -375,28 +441,35 @@ def post_baseline(
     )
     _record_audit(db, row.id, "baseline_survey_submitted", {"schema_version": SURVEY_SCHEMA_BASELINE})
 
-    b_scan = scan_user_text(body.primary_concern_short or "")
-    row.safety_max_severity = merge_session_severity(row.safety_max_severity, b_scan.severity)
-    row.safety_last_routing_action = severity_to_action(b_scan.severity)
-    append_safety_flag(
-        row,
-        {
-            "phase": "baseline_field",
-            "field": "primary_concern_short",
-            "codes": b_scan.matched_codes,
-            "severity": b_scan.severity,
-        },
-    )
-    _record_audit(
-        db,
-        row.id,
-        "safety_scan_baseline",
-        {
-            "severity": b_scan.severity,
-            "codes": b_scan.matched_codes,
-            "session_max_after": row.safety_max_severity,
-        },
-    )
+    for field_name, raw in (
+        ("primary_concern_short", body.primary_concern_short or ""),
+        ("treatment_notes", body.treatment_notes or ""),
+    ):
+        if not raw.strip():
+            continue
+        b_scan = scan_user_text(raw)
+        row.safety_max_severity = merge_session_severity(row.safety_max_severity, b_scan.severity)
+        row.safety_last_routing_action = severity_to_action(b_scan.severity)
+        append_safety_flag(
+            row,
+            {
+                "phase": "baseline_field",
+                "field": field_name,
+                "codes": b_scan.matched_codes,
+                "severity": b_scan.severity,
+            },
+        )
+        _record_audit(
+            db,
+            row.id,
+            "safety_scan_baseline",
+            {
+                "field": field_name,
+                "severity": b_scan.severity,
+                "codes": b_scan.matched_codes,
+                "session_max_after": row.safety_max_severity,
+            },
+        )
 
     db.commit()
     return BaselineOkResponse(status=row.status)
@@ -517,6 +590,11 @@ def post_chat_turn(
     """处理一轮用户输入：安全扫描、填槽、可选 LLM、写 chat_turns，并推进 FSM。"""
     if row.status in ("post_survey_pending", "completed"):
         raise HTTPException(status_code=400, detail="Chat has ended; no more messages can be sent.")
+    if row.status == "stage1_feedback_pending":
+        raise HTTPException(
+            status_code=400,
+            detail="Please review the Stage 1 summary and tap Continue before sending more messages.",
+        )
     if row.status not in ("chat_ready", "chat_active"):
         raise HTTPException(status_code=400, detail=f"Chat is not available in status: {row.status}")
     if not row.arm:
@@ -665,6 +743,20 @@ def post_chat_turn(
 
     row.chat_user_turns_in_stage += 1
 
+    if not stage_slots_complete(st, slots) and row.chat_user_turns_in_stage >= max_user_turns_for_stage(st):
+        if pad_incomplete_stage_with_cap_marker(st, slots):
+            row.slot_json = slots
+            _record_audit(
+                db,
+                row.id,
+                "stage_turn_cap_pad",
+                {
+                    "stage": st,
+                    "max_turns": max_user_turns_for_stage(st),
+                    "exchange_index": exchange_index,
+                },
+            )
+
     stage_complete = stage_slots_complete(st, slots)
     chat_closed = False
     assistant_stub = ""
@@ -702,21 +794,31 @@ def post_chat_turn(
         mode = "closing"
         chat_closed = True
     else:
-        first_next = first_missing_slot(nxt, slots)
-        if first_next is None:
-            raise HTTPException(status_code=500, detail="Next stage has no slot definition.")
-        assistant_stub = build_assistant_slot_stub(
-            row.arm,
-            st,
-            completing_chat=False,
-            next_stage=nxt,
-            ask_slot=first_next,
-            bundle=bundle,
-        )
-        mode = "transition"
+        if st == 1 and nxt == 2:
+            assistant_stub = (
+                "Thanks for sharing those details. On the next screen you'll see a brief recap of this section "
+                "and a few numbers you entered earlier. When you're ready, tap Continue to begin the next part."
+            )
+            mode = "stage1_feedback_bridge"
+            first_next = first_missing_slot(nxt, slots)
+            if first_next is None:
+                raise HTTPException(status_code=500, detail="Next stage has no slot definition.")
+        else:
+            first_next = first_missing_slot(nxt, slots)
+            if first_next is None:
+                raise HTTPException(status_code=500, detail="Next stage has no slot definition.")
+            assistant_stub = build_assistant_slot_stub(
+                row.arm,
+                st,
+                completing_chat=False,
+                next_stage=nxt,
+                ask_slot=first_next,
+                bundle=bundle,
+            )
+            mode = "transition"
 
     policy_l2 = routing == RoutingAction.SHOW_RESOURCES_AND_END_CHAT
-    llm_attempted = llm_is_configured() and not policy_l2
+    llm_attempted = llm_is_configured() and not policy_l2 and mode != "stage1_feedback_bridge"
     llm_res = None
     assistant_text = assistant_stub
     stub_flag = True
@@ -767,6 +869,17 @@ def post_chat_turn(
         row.chat_completed_at = datetime.now(timezone.utc)
         row.current_substate = None
         _record_audit(db, row.id, "chat_completed", {"final_stage": st})
+    elif mode == "stage1_feedback_bridge":
+        row.status = "stage1_feedback_pending"
+        row.fsm_stage = nxt  # type: ignore[assignment]
+        row.chat_user_turns_in_stage = 0
+        row.current_substate = None
+        _record_audit(
+            db,
+            row.id,
+            "stage1_feedback_pending",
+            {"from_stage": st, "to_stage": nxt},
+        )
     else:
         _record_audit(db, row.id, "stage_transition", {"from_stage": st, "to_stage": nxt})
         row.fsm_stage = nxt  # type: ignore[assignment]
@@ -888,10 +1001,105 @@ def post_chat_turn(
         exchange_index=exchange_index,
         status_after=row.status,
         chat_closed=chat_closed,
+        stage1_feedback_required=(mode == "stage1_feedback_bridge"),
         prompt_version=bundle.version_ref,
         safety_severity_this_turn=scan.severity,
         safety_routing_action=routing,
         safety_resources_suggested=res_suggest,
+    )
+
+
+@router.post("/{session_id}/chat/stage1-feedback/continue", response_model=Stage1FeedbackContinueResponse)
+def post_stage1_feedback_continue(
+    row: SessionRecord = Depends(get_current_session),
+    db: OrmSession = Depends(get_db),
+) -> Stage1FeedbackContinueResponse:
+    """参与者看完 Stage1 反馈卡后恢复聊天，并下发 Stage2 首问（写入一对 synthetic user + assistant turns）。"""
+    if row.status != "stage1_feedback_pending":
+        raise HTTPException(status_code=400, detail="Stage 1 feedback is not pending for this session.")
+    if not row.arm:
+        raise HTTPException(status_code=400, detail="Randomization not completed; cannot continue chat.")
+
+    ref = resolve_version_ref_for_session(row.prompt_bundle_version)
+    bundle = load_bundle(ref)
+    if row.prompt_bundle_version is None:
+        row.prompt_bundle_version = bundle.version_ref
+
+    slots = dict(row.slot_json or {})
+    next_slot = first_missing_slot(2, slots)
+    if next_slot is None:
+        raise HTTPException(status_code=500, detail="No Stage 2 slot to ask after Stage 1 feedback.")
+
+    assistant_text = build_assistant_slot_stub(
+        row.arm,
+        1,
+        completing_chat=False,
+        next_stage=2,
+        ask_slot=next_slot,
+        bundle=bundle,
+    )
+    row.status = "chat_active"
+    row.current_substate = qualified_slot_key(2, next_slot)
+
+    t_recv = datetime.now(timezone.utc)
+    row.chat_exchange_index += 1
+    ex = row.chat_exchange_index
+    row.chat_last_turn_index += 1
+    turn_user = row.chat_last_turn_index
+    row.chat_last_turn_index += 1
+    turn_asst = row.chat_last_turn_index
+    synthetic = "[stage1_feedback_continue]"
+    stub_meta: dict[str, Any] = {
+        "stub": True,
+        "stage1_feedback_continue": True,
+        "prompt_version": bundle.version_ref,
+    }
+    db.add(
+        ChatTurn(
+            session_id=row.id,
+            exchange_index=ex,
+            turn_index=turn_user,
+            role="user",
+            stage=2,
+            arm=row.arm,
+            text=synthetic,
+            user_text=synthetic,
+            assistant_text=None,
+            latency_ms=None,
+            server_received_at=t_recv,
+            response_ready_at=None,
+            stub_meta=stub_meta,
+        )
+    )
+    t_done = datetime.now(timezone.utc)
+    latency_ms = int((t_done - t_recv).total_seconds() * 1000)
+    db.add(
+        ChatTurn(
+            session_id=row.id,
+            exchange_index=ex,
+            turn_index=turn_asst,
+            role="assistant",
+            stage=2,
+            arm=row.arm,
+            text=assistant_text,
+            user_text=synthetic,
+            assistant_text=assistant_text,
+            latency_ms=latency_ms,
+            server_received_at=t_recv,
+            response_ready_at=t_done,
+            stub_meta=stub_meta,
+        )
+    )
+    _record_audit(db, row.id, "stage1_feedback_continued", {"exchange_index": ex})
+    _touch_activity(row)
+    db.commit()
+    return Stage1FeedbackContinueResponse(
+        ok=True,
+        assistant_text=assistant_text,
+        stub=True,
+        status_after=row.status,
+        exchange_index=ex,
+        prompt_version=bundle.version_ref,
     )
 
 
@@ -908,6 +1116,7 @@ def post_post_survey(
         raise HTTPException(status_code=409, detail="Post-survey was already submitted.")
 
     payload = body.model_dump()
+    payload["wai_tech_sf_total_12_84"] = sum(int(payload[f"wai_tech_sf_item_{i:02d}"]) for i in range(1, 13))
     db.add(
         SurveyResponse(
             session_id=row.id,

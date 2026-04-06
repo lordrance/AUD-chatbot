@@ -1,9 +1,6 @@
-# 15 个离线模拟用户：槽位顺序与 FSM 一致（9 条用户消息）；文案为英文以匹配英文界面与提示词。
-# 0: orientation_ack, time_ok
-# 1: recent_drinking, reduce_motivation
-# 2: main_trigger, trigger_context
-# 3: support_focus, micro_plan_step
-# 4: closing_ack
+# 15 个离线模拟用户（历史 9 轮文案；FSM 已扩展为 25 轮 + 可选 Stage3 缩小 2 轮）。
+# `eval/run_batch.py` / `run_llm_offline_batch.py` 在 user_turns 条数 ≠25 时会打印警告并改用内置默认 25 条序列。
+# 若需按人设覆盖，请为每个 persona 提供恰好 25 条 user_turns（与 chat_fsm.REQUIRED_SLOTS_BY_STAGE 顺序一致）。
 #
 # Coverage: motivation strength, long/short answers, social/stress/home triggers, disclosure level, mild distress (non-crisis)
 

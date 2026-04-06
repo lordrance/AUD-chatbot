@@ -1,13 +1,21 @@
-# Stage 2: triggers and context
+# Stage 2: high-risk situation decomposition (PDF)
 warm:
-  transition: "Got it. We'll make a very short coping plan focused on one situation."
-  stage_hint: "Identify one salient trigger; explore context lightly; no multi-item checklists."
+  transition: "Got it. Next we'll pick a strategy and shape a very small if–then plan."
+  stage_hint: "One question per turn; avoid stacking asks."
   slots:
-    main_trigger: "Which situation most often pulls you toward drinking more than you want? (Pick the one that matters most right now.)"
-    trigger_context: "What usually happens in that situation? One or two sentences is enough."
+    target_high_risk_situation: "Which situation most often pulls you toward drinking more than you want? Pick one priority."
+    people: "Who is usually around in that situation (or who matters there)? Short answer is fine."
+    place: "Where does it usually happen?"
+    time: "What time of day or week does it tend to happen?"
+    emotion_or_internal_state: "What do you tend to feel right before drinking in that moment?"
+    cue_or_trigger: "What is the clearest cue that makes picking up a drink most likely?"
 neutral:
-  transition: "Recorded. Short coping plan next—one situation only."
-  stage_hint: "Pin one trigger; factual context; avoid therapy jargon."
+  transition: "Next: brief support—choose a strategy and write one if–then micro-plan."
+  stage_hint: "Factual; single dimension per turn."
   slots:
-    main_trigger: "Which situation is the strongest trigger for heavier drinking for you right now?"
-    trigger_context: "What typically happens in that situation? Keep it short."
+    target_high_risk_situation: "Name the single highest-risk drinking situation you want to focus on."
+    people: "Who is typically present or relevant in that situation?"
+    place: "Where does this situation usually take place?"
+    time: "When does this situation tend to occur (time of day, day of week, etc.)?"
+    emotion_or_internal_state: "What emotions or internal state show up right before you drink there?"
+    cue_or_trigger: "What cue or trigger most strongly leads to drinking in that situation?"
