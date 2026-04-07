@@ -55,7 +55,7 @@ def apply_user_turn_local(
     slots: dict[str, Any] = dict(state.slot_json or {})
     target_slot = first_missing_slot(st, slots)
     if target_slot is None:
-        raise RuntimeError("无待填槽位")
+        raise RuntimeError("No pending slot to fill")
 
     text_trim = user_message.strip()[:4000]
     fill_key = qualified_slot_key(st, target_slot)
@@ -81,7 +81,7 @@ def apply_user_turn_local(
     if not stage_complete:
         next_ask = first_missing_slot(st, slots)
         if next_ask is None:
-            raise RuntimeError("槽位不一致")
+            raise RuntimeError("Slot bookkeeping mismatch")
         mode = "next_slot"
     elif nxt is None:
         mode = "closing"
@@ -89,7 +89,7 @@ def apply_user_turn_local(
     else:
         first_next = first_missing_slot(nxt, slots)
         if first_next is None:
-            raise RuntimeError("下一阶段缺少槽位")
+            raise RuntimeError("Next stage has no slot definition")
         mode = "transition"
 
     assistant_stub = build_assistant_slot_stub(

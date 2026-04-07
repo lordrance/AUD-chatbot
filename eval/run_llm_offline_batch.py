@@ -66,7 +66,7 @@ def _load_personas(path: Path) -> list[dict[str, Any]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="离线 FSM + 真实 LLM 批量转写（无 DB）")
+    parser = argparse.ArgumentParser(description="Offline FSM + real LLM batch transcripts (no DB)")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--runs-per-arm", type=int, default=2)
     parser.add_argument("--personas", type=Path, default=EVAL_DIR / "personas.yaml")
@@ -75,19 +75,19 @@ def main() -> int:
         "--limit-runs",
         type=int,
         default=0,
-        help="最多跑多少条 session（0=不限制；用于试跑）",
+        help="Maximum sessions to run (0=no limit; useful for trial runs)",
     )
     parser.add_argument(
         "--persona-start",
         type=int,
         default=0,
-        help="从 personas 列表中的索引开始（含），用于续跑后半批",
+        help="Start index in personas list (inclusive), useful for resumed batches",
     )
     parser.add_argument(
         "--persona-end",
         type=int,
         default=None,
-        help="personas 结束索引（不含）；默认到列表末尾",
+        help="End index in personas list (exclusive); defaults to end of list",
     )
     args = parser.parse_args()
 
@@ -101,7 +101,7 @@ def main() -> int:
     if not llm_is_configured():
         prov = (settings.llm_provider or "openai").strip().lower()
         need = "GEMINI_API_KEY" if prov == "gemini" else "OPENAI_API_KEY"
-        print(f"需要环境变量 {need}（当前 LLM_PROVIDER={prov}）", file=sys.stderr)
+        print(f"Missing env var {need} (current LLM_PROVIDER={prov})", file=sys.stderr)
         return 2
     from app.services.prompt_registry import clear_bundle_cache, load_bundle
     from eval.fsm_turn_local import LocalChatState, apply_user_turn_local
@@ -111,7 +111,7 @@ def main() -> int:
     bundle = load_bundle(None)
     if bundle.version_ref != f"safechat-aud@{args.prompt_bundle_version}":
         print(
-            f"警告：期望 safechat-aud@{args.prompt_bundle_version}，实际 {bundle.version_ref}",
+            f"Warning: expected safechat-aud@{args.prompt_bundle_version}, got {bundle.version_ref}",
             file=sys.stderr,
         )
 
@@ -125,9 +125,9 @@ def main() -> int:
     pe = args.persona_end if args.persona_end is not None else len(personas)
     personas = personas[args.persona_start : pe]
     if not personas:
-        print("persona 切片为空", file=sys.stderr)
+        print("Persona slice is empty", file=sys.stderr)
         return 2
-    arms = ("empathic", "neutral")
+    arms = ("neutral_professional", "supportive_practical", "warm_empathic", "empathic", "neutral")
     summary_rows: list[dict[str, Any]] = []
     csv_fieldnames: list[str] | None = None
     failure_jsonl = out_root / "failure_log.jsonl"
@@ -147,7 +147,7 @@ def main() -> int:
         "runs_per_arm": args.runs_per_arm,
         "persona_count": len(personas),
         "limit_runs": args.limit_runs,
-        "note": "无 DB；与 run_batch.py 产物结构对齐，便于 taxonomy / 人工评审。",
+        "note": "No DB; output schema aligned with run_batch.py for taxonomy and human review.",
     }
     (out_root / "run_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -177,7 +177,7 @@ def main() -> int:
                 user_turns = list(persona.get("user_turns") or [])
                 if len(user_turns) != EXPECTED_CHAT_USER_TURNS:
                     print(
-                        f"警告: persona {pid} user_turns={len(user_turns)}，需要 {EXPECTED_CHAT_USER_TURNS}；使用默认序列",
+                        f"Warning: persona {pid} user_turns={len(user_turns)}; expected {EXPECTED_CHAT_USER_TURNS}. Falling back to defaults.",
                         file=sys.stderr,
                     )
                     user_turns = _DEFAULT_TURNS
@@ -296,7 +296,7 @@ def main() -> int:
     (out_root / "run_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    print(f"完成：{out_root}（{len(summary_rows)} sessions）")
+    print(f"Done: {out_root} ({len(summary_rows)} sessions)")
     return 0
 
 

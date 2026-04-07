@@ -2,7 +2,9 @@
 
 ## 简介
 
-SafeChat-AUD 是一套面向**酒精相关减量研究**的**单次会话**线上流程脚手架：参与者完成知情同意、资格筛查、基线问卷后，被随机分配到一种文本对话风格（如共情温暖 vs 中立专业），经多轮结构化聊天，再填写后测；可选 7 天极简随访。技术栈为 **PostgreSQL + FastAPI + React（Vite）**。对话提示词在 `prompts/`（YAML 与 `strategies.json`）；安全策略为服务端规则扫描（见 `apps/api/app/services/safety_routing.py`）。**参与者可见的网页与 API 提示文案当前为英文**，便于国际受试或英文论文场景；伦理正文与批件语言以机构要求为准。
+SafeChat-AUD 是一套面向**酒精相关减量研究**的**单次会话**线上流程脚手架：参与者完成知情同意、资格筛查、基线问卷后，被随机分配到一种文本对话风格（**三臂**：中立专业 / 支持性务实 / 温暖共情；配置可降为两臂 A+C），经多轮结构化聊天，再填写后测；可选 7 天极简随访。技术栈为 **PostgreSQL + FastAPI + React（Vite）**。对话提示词在 `prompts/`（YAML 与 `strategies.json`）；安全策略为服务端规则扫描（见 `apps/api/app/services/safety_routing.py`）。**参与者可见的网页与 API 提示文案当前为英文**，便于国际受试或英文论文场景；伦理正文与批件语言以机构要求为准。
+
+**材料与 schema 版本**（论文 Methods）：见 `docs/slot-schema-and-stages.md` 末尾「材料版本化」表，以及 `docs/data-dictionary-export-spec.md`。
 
 ---
 

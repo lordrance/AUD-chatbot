@@ -1,4 +1,9 @@
-"""统一 LLM 适配：超时、重试、用量与延迟；不修改业务 FSM。"""
+"""统一 LLM 适配：超时、重试、用量与延迟；不修改业务 FSM。
+
+当前实现走 **Chat Completions** + ``response_format``（OpenAI 侧为 json_schema 或 json_object），
+与 Structured Outputs 同级的 JSON 契约由 ``LlmTurnStructuredOutput`` / ``openai_json_schema_for_turn_output``
+定义。若需切换 **Responses API**，应另增适配层并把 ``LLM_API_TYPE_LABEL`` 与审计字段同步更新。
+"""
 
 from __future__ import annotations
 

@@ -28,7 +28,7 @@ def main() -> int:
 
     summary_path = args.batch_dir / "summary.jsonl"
     if not summary_path.is_file():
-        print("缺少 summary.jsonl", file=sys.stderr)
+        print("Missing summary.jsonl", file=sys.stderr)
         return 2
 
     lines = summary_path.read_text(encoding="utf-8").strip().split("\n")
@@ -47,7 +47,7 @@ def main() -> int:
         run_slug = f"{row['persona_id']}__{row['arm']}__r{row['run_index']}"
         art_path = args.batch_dir / "artifacts" / f"{run_slug}.json"
         if not art_path.is_file():
-            print(f"缺少 artifact: {art_path}", file=sys.stderr)
+            print(f"Missing artifact: {art_path}", file=sys.stderr)
             return 2
         art = json.loads(art_path.read_text(encoding="utf-8"))
         turns = art.get("turns") or []
@@ -106,12 +106,12 @@ def main() -> int:
     md_lines = [
         "# Failure taxonomy v0.1",
         "",
-        f"- 批次目录: `{args.batch_dir}`",
-        f"- 分析 session 数: {len(rows)}",
+        f"- Batch directory: `{args.batch_dir}`",
+        f"- Sessions analyzed: {len(rows)}",
         "",
-        "## 按类型计数（递减）",
+        "## Counts by type (desc)",
         "",
-        "| 类型 | 计数 | 示例 run_slug |",
+        "| Type | Count | Example run_slug |",
         "|------|------|----------------|",
     ]
     for k, c in sorted(taxonomy_counts.items(), key=lambda x: -x[1]):
@@ -119,19 +119,19 @@ def main() -> int:
         md_lines.append(f"| {k} | {c} | {ex} |")
     md_lines += [
         "",
-        "## 类型说明",
+        "## Type descriptions",
         "",
-        "- **F1_style_leakage_neutral**：neutral 臂自动检测到温情/关系性用语。",
-        "- **F2_multi_question_turn**：单轮出现双问号或明显并列追问。",
-        "- **F3_stage3_vague_micro_plan**：stage_after=3 的助手句缺少 if-then/具体行为线索。",
-        "- **F4_partial_stub_mixed_llm**：9 轮中仅部分回退 stub（如 JSON/超时），需对照 llm_calls。",
-        "- **F5_incomplete_session**：未完成全阶段。",
-        "- **F6_full_session_stub_or_llm_disabled**：9/9 均为 stub；常见原因为配额/密钥/网络或未开启 LLM。",
+        "- **F1_style_leakage_neutral**: warm/relational wording detected in neutral arm.",
+        "- **F2_multi_question_turn**: two-plus question marks or explicit parallel asks in one turn.",
+        "- **F3_stage3_vague_micro_plan**: stage_after=3 assistant text lacks if-then/concrete action cues.",
+        "- **F4_partial_stub_mixed_llm**: partial stub fallback across 9 turns (e.g., JSON/timeout issues), verify with llm_calls.",
+        "- **F5_incomplete_session**: session did not complete all stages.",
+        "- **F6_full_session_stub_or_llm_disabled**: 9/9 turns were stub; common causes are quota/key/network or LLM disabled.",
         "",
-        f"机器可读: `{jpath.name}`",
+        f"Machine-readable: `{jpath.name}`",
     ]
     (args.batch_dir / "failure_taxonomy_v01.md").write_text("\n".join(md_lines), encoding="utf-8")
-    print(f"写入 {jpath} 与 failure_taxonomy_v01.md")
+    print(f"Wrote {jpath} and failure_taxonomy_v01.md")
     return 0
 
 

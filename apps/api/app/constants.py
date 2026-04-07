@@ -7,8 +7,15 @@ CONSENT_DOCUMENT_VERSION = "2026-04-04-v1"
 SURVEY_SCHEMA_CONSENT = "1"
 SURVEY_SCHEMA_ELIGIBILITY = "2"
 SURVEY_SCHEMA_BASELINE = "2"
-SURVEY_SCHEMA_POST = "3"
+SURVEY_SCHEMA_POST = "4"
 SURVEY_SCHEMA_FOLLOWUP_7D = "1"
 
 # 默认提示词包版本（仅版本号；完整引用由 manifest.bundle_id 拼接）
 DEFAULT_PROMPT_BUNDLE_VERSION = "0.2.1"
+
+# answer2.pdf：汇报用目标助手轮次区间（不等同于当前 FSM 用户轮数上限）
+STUDY_TARGET_ASSISTANT_TURNS_MIN = 12
+STUDY_TARGET_ASSISTANT_TURNS_MAX = 16
+
+# 当前 LLM 接入在论文/审计中的标签（实现为 OpenAI Chat Completions + json_schema / json_object）
+LLM_API_TYPE_LABEL = "chat_completions"

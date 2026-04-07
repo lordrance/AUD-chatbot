@@ -44,13 +44,14 @@ def _normalize_ref(version_ref: str, manifest: dict[str, Any]) -> tuple[str, str
 
 @dataclass(frozen=True)
 class PromptBundle:
-    """内存中的提示词包：全局/两臂风格与各阶段 YAML 内容。"""
+    """内存中的提示词包：全局/三臂风格与各阶段 YAML 内容。"""
 
     bundle_id: str
     version: str
     global_data: dict[str, Any]
     warm: dict[str, Any]
     neutral: dict[str, Any]
+    supportive_practical: dict[str, Any]
     stages: dict[int, dict[str, Any]]
 
     @property
@@ -72,10 +73,13 @@ def _build_bundle(prompts_dir: Path, bundle_id: str, version: str, manifest: dic
     global_name = str(files.get("global") or "global.yaml")
     warm_name = str(files.get("warm") or "warm.yaml")
     neutral_name = str(files.get("neutral") or "neutral.yaml")
+    sp_name = files.get("supportive_practical")
+    sp_path = prompts_dir / str(sp_name) if sp_name else None
 
     global_data = _read_yaml(prompts_dir / global_name)
     warm_data = _read_yaml(prompts_dir / warm_name)
     neutral_data = _read_yaml(prompts_dir / neutral_name)
+    supportive_data = _read_yaml(sp_path) if sp_path else {}
 
     stages: dict[int, dict[str, Any]] = {}
     for k, fname in files.items():
@@ -90,6 +94,7 @@ def _build_bundle(prompts_dir: Path, bundle_id: str, version: str, manifest: dic
         global_data=global_data,
         warm=warm_data,
         neutral=neutral_data,
+        supportive_practical=supportive_data,
         stages=stages,
     )
 

@@ -148,6 +148,7 @@ export function PostSurveyPage() {
   const [disc, setDisc] = useState(init5);
   const [change, setChange] = useState(init5);
   const [mWarm, setMWarm] = useState(init5);
+  const [mPractical, setMPractical] = useState(init5);
   const [mProf, setMProf] = useState(init5);
   const [mUnd, setMUnd] = useState(init5);
   const [mRep, setMRep] = useState(init5);
@@ -196,6 +197,7 @@ export function PostSurveyPage() {
         disclosure_comfort_1_5: disc,
         change_intention_1_5: change,
         manipulation_felt_warm_1_5: mWarm,
+        manipulation_felt_practical_actionable_1_5: mPractical,
         manipulation_felt_professional_1_5: mProf,
         manipulation_understood_feelings_1_5: mUnd,
         manipulation_felt_repetitive_1_5: mRep,
@@ -268,6 +270,12 @@ export function PostSurveyPage() {
           label="The style felt warm and personable."
           value={mWarm}
           onChange={setMWarm}
+        />
+        <Likert5
+          fieldId="m_practical"
+          label="The style felt practical and focused on concrete next steps (problem-solving)."
+          value={mPractical}
+          onChange={setMPractical}
         />
         <Likert5
           fieldId="m_prof"

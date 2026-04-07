@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from app.services.arm_styles import arm_label_for_llm, style_dict_for_arm
 from app.services.prompt_registry import PromptBundle
 
 
@@ -38,8 +39,8 @@ def build_turn_messages(
     strategies: dict[str, Any],
 ) -> list[dict[str, str]]:
     """根据 bundle、臂、槽位与 transcript 组装单轮 LLM 的 system/user 消息列表。"""
-    arm_label = "empathic_warm" if arm == "empathic" else "neutral_professional"
-    style_block = _json_clip(bundle.warm if arm == "empathic" else bundle.neutral, 2000)
+    arm_label = arm_label_for_llm(arm)
+    style_block = _json_clip(style_dict_for_arm(bundle, arm), 2000)
     global_block = _json_clip(bundle.global_data, 2000)
     stage_block = _json_clip(bundle.stages.get(stage_at_turn, {}), 4000)
 
@@ -64,7 +65,11 @@ def build_turn_messages(
 3) assistant_text: one or two short sentences in English; tone must match arm={arm_label}.
 4) safety_level: integer 0–5; 0 means no risk cues detected; needs_human_review means suggest human review (use true when uncertain).
 5) extracted_slot_entries: optional key/value strings extracted from the user's last message; do not invent facts.
-6) selected_strategy_ids: strategy ids from the strategy library (empty array if none).
+6) selected_strategy_ids: strategy ids from the strategy library JSON. If the library lists offered_strategy_ids, only use those ids (at most offer_max items—usually 2); otherwise empty array.
+7) dialogue_acts: array of tags describing this turn (e.g. open_question, reflection, affirmation, summary, practical_suggestion); be accurate.
+8) next_action: one of ask_followup, offer_options, move_stage, show_resources.
+9) model_reported_stage: optional string such as stage1|stage2|stage3|stage4 for logging only—server FSM overrides transitions.
+10) risk: object with level 0–5 and reason string or null (model-side guess only; server runs separate safety rules).
 
 [Global and style]
 GLOBAL:

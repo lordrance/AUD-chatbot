@@ -11,7 +11,7 @@
 | `id` | UUID | 会话主键；全表外键锚点 |
 | `session_token` | 字符串 | 被试 API 认证用（**敏感**；导出分析常脱敏或哈希） |
 | `status` | 枚举字符串 | `consent_pending` … `completed` / `ineligible` / `abandoned` 等 |
-| `arm` | 字符串 \| null | `empathic` / `neutral`；随机分组后写入 |
+| `arm` | 字符串 \| null | 三臂：`neutral_professional` / `supportive_practical` / `warm_empathic`；历史数据可能为 `empathic` / `neutral` |
 | `fsm_stage` | int | 聊天 FSM 当前/结束阶段（0–4，结束后进入后测时可能停在末段） |
 | `dropout_stage` | 字符串 \| null | 中止编码，如 `safety_pre_chat`、`safety_emergency_in_chat` |
 | `prompt_bundle_version` | 字符串 \| null | 冻结的提示词包引用（如 `safechat-aud@0.2.1`），与 **prompt_version** 日志一致 |
@@ -52,7 +52,7 @@
 | `user_text` / `assistant_text` | 分角色副本 |
 | `latency_ms` | 助手轮次从收到用户到就绪的延迟（毫秒）；用户轮常为 null |
 | `server_received_at` / `response_ready_at` | timestamptz |
-| **`stub_meta`** | JSONB：含 **`prompt_version`**、本回合 **`safety_flags`**（代码列表）、**`safety_routing_action`**、**`safety_severity_this_turn`**、`slot_filled`、`stage_at_request`、`fsm_stage_after`、LLM 尝试/错误/`model` 相关键（无 key 时多为 stub） |
+| **`stub_meta`** | JSONB：含 **`prompt_version`**、本回合 **`safety_flags`**（代码列表）、**`safety_routing_action`**、**`safety_severity_this_turn`**、`slot_filled`、`stage_at_request`、`fsm_stage_after`、LLM 尝试/错误/`model` 相关键；LLM 路径另含 **`dialogue_acts`**、**`next_action`**、**`model_reported_stage`**、**`llm_risk_block`**、**`extracted_slots`**、**`selected_strategy_ids`**、**`llm_api_type`**（如 `chat_completions`）等（无 key 时多为 stub） |
 
 **聚合示例（思路）**：`GROUP BY session_id, stage WHERE role='user'` → 每阶段用户发言条数。
 
@@ -71,25 +71,24 @@
 | `latency_ms` | 调用耗时 |
 | `prompt_tokens` / `completion_tokens` / `total_tokens` | 可空 |
 | `success` / `fallback_used` / `error_message` | 成功与否与回退 |
-| `normalized_output` / `raw_content` | 结构化/原始输出（体积可能大） |
+| `normalized_output` / `raw_content` | 结构化/原始输出（成功时 `normalized_output` 为 **`LlmTurnStructuredOutput`** 的 JSON，含 `dialogue_acts`、`risk`、`next_action` 等；体积可能大） |
 
 ---
 
 ## D. 结构化摘要卡（`sessions.chat_summary_json`）
 
-由 `app/services/chat_summary.py` 生成，`schema_version` 恒为 **`"1"`**（与常量 `CHAT_SUMMARY_SCHEMA_VERSION` 一致）。
+由 `app/services/chat_summary.py` 生成，`schema_version` 当前为 **`"3"`**（与常量 `CHAT_SUMMARY_SCHEMA_VERSION` 一致）。
 
 | JSON 键 | 说明 |
 |---------|------|
-| `schema_version` | `"1"` |
-| `top_reason_to_cut_down` | 槽位 `1:reduce_motivation` |
-| `top_trigger_high_risk_situation` | `2:main_trigger` |
-| `trigger_context` | `2:trigger_context` |
-| `support_focus` | `3:support_focus` |
-| `micro_plan_if_then` | `3:micro_plan_step` |
-| `change_readiness_baseline_1_10` | 整数 1–10，来自**基线问卷** |
-| `optional_takeaway` | `4:closing_ack` |
-| `confidence_summary` | 可读摘要（如含基线准备度句子）；可空 |
+| `schema_version` | `"3"` |
+| `preferred_name`, `top_reason`, `top_trigger`, `chosen_plan` | Stage 0–4 槽位聚合 |
+| `closing_confidence_0_10`, `optional_takeaway` | Stage 4 |
+| `selected_strategy`, `trigger_context`, `micro_plan_if_then` | Stage 2–3 |
+| `change_readiness_baseline_1_10`, `importance_to_reduce_baseline_0_10` | 来自基线问卷 |
+| `confidence_summary` | 可读摘要（基线 + 各阶段信心）；可空 |
+| **`pdf_*`** | 与 answer2 论文表对齐的别名（如 `pdf_recent_drinking_pattern`, `pdf_if_then_plan` 等）；见 `docs/slot-schema-and-stages.md` |
+| **Legacy** | `top_reason_to_cut_down`, `top_trigger_high_risk_situation`, `support_focus` 等仍写入以便旧脚本 |
 
 **来源**：以 `slot_json` + 基线为主；**非**全文 LLM 摘要。
 
@@ -104,24 +103,25 @@
 | `consent` | `1` | 含 `consent_accepted`、`consent_document_version` |
 | `eligibility` | `1` | AUDIT-C 等；含服务端衍生 `computed_*`、`passed` |
 | `baseline` | `1` | `typical_drinks_last_week`、`readiness_to_change_1_10`、`primary_concern_short` 等 |
-| `post` | **`2`** | 后测；字段与 **`PostSurveySubmit`** 一致，见下 **F** |
+| `post` | **`4`** | 后测；字段与 **`PostSurveySubmit`** / `SURVEY_SCHEMA_POST` 一致，见下 **F** |
 
 ---
 
-## F. 后测字段（`instrument=post`, `schema_version=2`）
+## F. 后测字段（`instrument=post`, `schema_version=4`）
 
 写入 `answers` 的键（与 API `PostSurveySubmit` 对齐）：
 
 | 键 | 类型 | 说明 |
 |----|------|------|
-| `therapeutic_alliance_1_5` | int 1–5 | 数字治疗联盟 |
+| `wai_tech_sf_item_01` … `wai_tech_sf_item_12` | int 1–7 | WAI-TECH-SF |
 | `trust_1_5` | int 1–5 | 信任 |
 | `helpfulness_1_5` | int 1–5 | 有帮助 |
 | `disclosure_comfort_1_5` | int 1–5 | 披露舒适度 |
 | `change_intention_1_5` | int 1–5 | 改变意向 |
-| `manipulation_felt_warm_1_5` | int 1–5 | 操纵检验 |
-| `manipulation_felt_professional_1_5` | int 1–5 | 同上 |
-| `manipulation_understood_feelings_1_5` | int 1–5 | 同上 |
+| `manipulation_felt_warm_1_5` | int 1–5 | 操纵检验（温暖） |
+| `manipulation_felt_professional_1_5` | int 1–5 | 操纵检验（专业克制） |
+| `manipulation_felt_practical_actionable_1_5` | int 1–5 | 操纵检验（**B 臂**：务实可执行） |
+| `manipulation_understood_feelings_1_5` | int 1–5 | 操纵检验 |
 | `manipulation_felt_repetitive_1_5` | int 1–5 | 同上（越高越重复/脚本感） |
 | `manipulation_felt_personal_tailored_1_5` | int 1–5 | 同上 |
 | `open_most_helpful` | 字符串 | 开放题 |
@@ -159,8 +159,10 @@
 
 | 字段 | 说明 |
 |------|------|
-| `event_type` | 如 `session_created`、`randomized`、`chat_completed`、`safety_routing_transition`、`followup_opt_in` |
-| `payload` | JSONB；安全相关常含 `routing_action`、`severity`、`phase` 等 |
+| `event_type` | 如 `session_created`、`randomized`、`chat_completed`、`stage_transition`、`safety_routing_transition`、`ui_event`、`followup_opt_in` |
+| `payload` | JSONB；当审计行 `event_type` 为 **`ui_event`** 时，payload 内另有字段 **`event_type`**（交互子类型，如 `user_send`）、`event_value`、`fsm_stage`、`received_at` 等；安全相关事件常含 `routing_action`、`severity`、`phase` 等 |
+
+**前端 UI 事件（`event_type=ui_event`）**：典型子类型包括 `user_send`、`skip_turn`、`quick_reply_chip_click`、`tab_hidden` / `tab_visible`（见 `apps/web` ChatPage → `POST .../instrument/ui-event`）。
 
 ---
 

@@ -7,26 +7,28 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.services.arm_styles import style_block_key, style_dict_for_arm
 from app.services.chat_fsm import MAX_CHAT_STAGE
 from app.services.prompt_registry import PromptBundle, load_bundle
 
 
-def _warm_neutral(arm: str) -> bool:
-    """当前臂是否为共情/温暖条件（empathic）。"""
-    return arm == "empathic"
-
-
 def _arm_style(bundle: PromptBundle, arm: str) -> dict[str, Any]:
-    """取 bundle 中对应臂的全局语气块（warm 或 neutral）。"""
-    return bundle.warm if arm == "empathic" else bundle.neutral
+    """取 bundle 中对应臂的全局风格块（warm / neutral / supportive_practical）。"""
+    return style_dict_for_arm(bundle, arm)
 
 
 def _arm_stage_block(bundle: PromptBundle, stage: int, arm: str) -> dict[str, Any]:
-    """某阶段 YAML 下 warm 或 neutral 子块（含 transition/slots）。"""
+    """某阶段 YAML 下对应风格子块（含 transition/slots）。"""
     st = bundle.stages.get(stage) or {}
-    ak = "warm" if arm == "empathic" else "neutral"
+    ak = style_block_key(arm)
     block = st.get(ak)
-    return block if isinstance(block, dict) else {}
+    if isinstance(block, dict) and block:
+        return block
+    block_n = st.get("neutral")
+    if isinstance(block_n, dict) and block_n:
+        return block_n
+    block_w = st.get("warm")
+    return block_w if isinstance(block_w, dict) else {}
 
 
 def _style_prefix(bundle: PromptBundle, arm: str, *, transition: bool) -> str:
@@ -171,45 +173,51 @@ _SLOT_FALLBACK_PAIR: dict[tuple[int, str], tuple[str, str]] = {
 
 def _transition_line_fallback(arm: str, stage: int) -> str:
     """YAML 缺失时的阶段过渡英文回退文案。"""
-    w = _warm_neutral(arm)
-    if stage == 0:
-        return (
-            "Thanks. Next we'll look at your recent drinking pattern and what you want to change."
-            if w
-            else "Next: recent drinking pattern, a concerning episode, and your reasons to cut down."
-        )
-    if stage == 1:
-        return (
-            "Thanks. Next we'll narrow in on one high-risk drinking situation and its details."
-            if w
-            else "Next topic: one high-risk situation—people, place, time, feelings, and cues."
-        )
-    if stage == 2:
-        return (
-            "Got it. Next we'll pick a strategy and shape a very small if–then plan."
-            if w
-            else "Next: brief support—choose a strategy and write one if–then micro-plan."
-        )
-    if stage == 3:
-        return (
-            "Great. Let's summarize and close so you can move to the post-survey."
-            if w
-            else "Closing: confirm your summary lines, then the post-survey."
-        )
-    return (
-        "Thank you for taking part. Please continue with the short post-survey."
-        if w
-        else "Thank you. Please complete the post-survey."
-    )
+    k = style_block_key(arm)
+    tw = {
+        0: {
+            "warm": "Thanks. Next we'll look at your recent drinking pattern and what you want to change.",
+            "neutral": "Next: recent drinking pattern, a concerning episode, and your reasons to cut down.",
+            "supportive_practical": "Good. Next we'll map your recent drinking and your top reason to cut down—small steps.",
+        },
+        1: {
+            "warm": "Thanks. Next we'll narrow in on one high-risk drinking situation and its details.",
+            "neutral": "Next topic: one high-risk situation—people, place, time, feelings, and cues.",
+            "supportive_practical": "Next we'll zoom in on one risky situation—when, where, who, and triggers.",
+        },
+        2: {
+            "warm": "Got it. Next we'll pick a strategy and shape a very small if–then plan.",
+            "neutral": "Next: brief support—choose a strategy and write one if–then micro-plan.",
+            "supportive_practical": "Next we'll pick one strategy and a simple if–then you can try.",
+        },
+        3: {
+            "warm": "Great. Let's summarize and close so you can move to the post-survey.",
+            "neutral": "Closing: confirm your summary lines, then the post-survey.",
+            "supportive_practical": "Next we'll lock your summary lines, then the post-survey.",
+        },
+    }
+    end = {
+        "warm": "Thank you for taking part. Please continue with the short post-survey.",
+        "neutral": "Thank you. Please complete the post-survey.",
+        "supportive_practical": "Thanks—please continue to the short post-survey.",
+    }
+    if stage in tw:
+        return tw[stage][k]
+    return end[k]
 
 
 def _slot_question_fallback(arm: str, stage: int, slot: str) -> str:
     """YAML 缺失时按阶段/槽位的英文追问回退。"""
-    w = _warm_neutral(arm)
+    k = style_block_key(arm)
     pair = _SLOT_FALLBACK_PAIR.get((stage, slot))
     if pair:
-        return pair[0] if w else pair[1]
-    return "Please keep your reply brief." if w else "Please reply."
+        warm_t, neutral_t = pair
+        if k == "warm":
+            return warm_t
+        if k == "neutral":
+            return neutral_t
+        return neutral_t
+    return "Please keep your reply brief." if k == "warm" else "Please reply."
 
 
 def _transition_resolved(bundle: PromptBundle, arm: str, stage: int) -> str:
@@ -255,7 +263,12 @@ def build_assistant_slot_stub(
 
     if completing_chat:
         body = _transition_resolved(b, arm, stage_completed)
-        return f"{_style_prefix(b, arm, transition=True)}{body}".strip()[:1200]
+        out = f"{_style_prefix(b, arm, transition=True)}{body}".strip()
+        blk = _arm_stage_block(b, stage_completed, arm)
+        sign = blk.get("sign_off") or blk.get("closing_sign_off")
+        if sign:
+            out = f"{out} {str(sign).strip()}".strip()
+        return out[:1200]
 
     if next_stage is not None and ask_slot is not None:
         trans = _transition_resolved(b, arm, stage_completed)

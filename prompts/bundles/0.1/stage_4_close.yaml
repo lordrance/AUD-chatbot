@@ -2,6 +2,7 @@
 warm:
   transition: "Thank you. Please continue to the brief post-survey when you're ready."
   stage_hint: "Short confirmations; optional takeaway."
+  sign_off: "Opening up about drinking isn't easy—thanks for sticking with it."
   slots:
     top_reason: "To close: in one line, what is your top reason for cutting down?"
     top_trigger: "In one line, what is the main trigger situation you focused on?"
@@ -11,9 +12,20 @@ warm:
 neutral:
   transition: "Thank you. Please complete the post-survey."
   stage_hint: "One line each; numeric confidence 0–10."
+  sign_off: "This chat session is complete; you now have a concrete written plan to review."
   slots:
     top_reason: "State your main reason to reduce drinking (one line)."
     top_trigger: "State the main high-risk situation in one line."
     chosen_plan: "Restate your chosen if–then plan in one line."
     closing_confidence_0_10: "Rate 0–10 your confidence in this plan right now."
     optional_takeaway: "Optional: anything else to add? If not, reply \"none\"."
+supportive_practical:
+  transition: "You have a concrete step on paper—that's what we aimed for. Please continue to the short post-survey."
+  stage_hint: "Emphasize executable step; one line per slot; practical close."
+  sign_off: "You've shaped one step you can actually try—carry that forward when you're ready."
+  slots:
+    top_reason: "One line: your top reason to cut down."
+    top_trigger: "One line: the trigger situation you focused on."
+    chosen_plan: "One line: your if–then plan."
+    closing_confidence_0_10: "0–10: how confident are you in this plan now?"
+    optional_takeaway: "Anything else? If not, reply \"none\"."

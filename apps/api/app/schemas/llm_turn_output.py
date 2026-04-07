@@ -1,8 +1,15 @@
-"""LLM 单轮结构化输出：Pydantic 校验；阶段跳转仅信服务端 FSM，模型 stage_complete 仅作记录。"""
+"""LLM 单轮结构化输出：Pydantic 校验；阶段跳转仅信服务端 FSM；含 dialogue_acts / risk / next_action 供操纵检验与安全审计。"""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
+
+
+class LlmRiskBlock(BaseModel):
+    """模型自报风险层级（服务端仍以规则扫描为准）。"""
+
+    level: int = Field(ge=0, le=5, description="0=no risk language in model view")
+    reason: str | None = None
 
 
 class LlmTurnStructuredOutput(BaseModel):
@@ -16,6 +23,21 @@ class LlmTurnStructuredOutput(BaseModel):
     selected_strategy_ids: list[str] = Field(default_factory=list)
     safety_level: int = Field(ge=0, le=5)
     needs_human_review: bool
+    dialogue_acts: list[str] = Field(
+        default_factory=list,
+        description="如 open_question, reflection, affirmation, summary, practical_suggestion",
+    )
+    next_action: Literal[
+        "ask_followup",
+        "offer_options",
+        "move_stage",
+        "show_resources",
+    ] = "ask_followup"
+    model_reported_stage: str | None = Field(
+        default=None,
+        description="模型自报 stage1|stage2|…；服务端 FSM 为准，仅作记录。",
+    )
+    risk: LlmRiskBlock = Field(default_factory=lambda: LlmRiskBlock(level=0, reason=None))
 
     @field_validator("assistant_text")
     @classmethod
@@ -36,10 +58,18 @@ class LlmTurnStructuredOutput(BaseModel):
             return [str(x) for x in v]
         return [str(v)]
 
+    @field_validator("dialogue_acts", mode="before")
+    @classmethod
+    def coerce_acts(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        return [str(v)]
+
 
 def openai_json_schema_for_turn_output() -> dict[str, Any]:
     """构造 OpenAI Chat Completions `response_format.json_schema`（strict）所需的 schema 描述。"""
-    # 避免 dict[str, Any] 在 strict 下难以表达：extracted_slots 用键值对列表
     return {
         "name": "safechat_turn_output",
         "strict": True,
@@ -67,6 +97,29 @@ def openai_json_schema_for_turn_output() -> dict[str, Any]:
                 },
                 "safety_level": {"type": "integer", "minimum": 0, "maximum": 5},
                 "needs_human_review": {"type": "boolean"},
+                "dialogue_acts": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "next_action": {
+                    "type": "string",
+                    "enum": [
+                        "ask_followup",
+                        "offer_options",
+                        "move_stage",
+                        "show_resources",
+                    ],
+                },
+                "model_reported_stage": {"type": ["string", "null"]},
+                "risk": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "level": {"type": "integer", "minimum": 0, "maximum": 5},
+                        "reason": {"type": ["string", "null"]},
+                    },
+                    "required": ["level", "reason"],
+                },
             },
             "required": [
                 "assistant_text",
@@ -75,6 +128,10 @@ def openai_json_schema_for_turn_output() -> dict[str, Any]:
                 "selected_strategy_ids",
                 "safety_level",
                 "needs_human_review",
+                "dialogue_acts",
+                "next_action",
+                "model_reported_stage",
+                "risk",
             ],
         },
     }
@@ -89,6 +146,10 @@ class LlmRawOpenAiShape(BaseModel):
     selected_strategy_ids: list[str] = Field(default_factory=list)
     safety_level: int = Field(ge=0, le=5)
     needs_human_review: bool
+    dialogue_acts: list[str] = Field(default_factory=list)
+    next_action: str = "ask_followup"
+    model_reported_stage: str | None = None
+    risk: LlmRiskBlock | None = None
 
     def to_canonical(self) -> LlmTurnStructuredOutput:
         """将键值对列表折叠为 extracted_slots 字典并生成规范输出对象。"""
@@ -97,6 +158,13 @@ class LlmRawOpenAiShape(BaseModel):
             k = (e.get("key") or "").strip()
             if k:
                 slots[k] = e.get("value") or ""
+        na = self.next_action if self.next_action in (
+            "ask_followup",
+            "offer_options",
+            "move_stage",
+            "show_resources",
+        ) else "ask_followup"
+        rb = self.risk if self.risk is not None else LlmRiskBlock(level=0, reason=None)
         return LlmTurnStructuredOutput(
             assistant_text=self.assistant_text,
             extracted_slots=slots,
@@ -104,4 +172,8 @@ class LlmRawOpenAiShape(BaseModel):
             selected_strategy_ids=list(self.selected_strategy_ids),
             safety_level=self.safety_level,
             needs_human_review=self.needs_human_review,
+            dialogue_acts=list(self.dialogue_acts),
+            next_action=na,  # type: ignore[arg-type]
+            model_reported_stage=self.model_reported_stage,
+            risk=rb,
         )

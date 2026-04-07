@@ -9,6 +9,7 @@ bundles:
       global: bundles/0.1/global.yaml
       warm: bundles/0.1/warm.yaml
       neutral: bundles/0.1/neutral.yaml
+      supportive_practical: bundles/0.1/supportive_practical.yaml
       stage_0: bundles/0.1/stage_0_onboarding.yaml
       stage_1: bundles/0.1/stage_1_assess.yaml
       stage_2: bundles/0.1/stage_2_triggers.yaml
@@ -21,6 +22,7 @@ bundles:
       global: bundles/0.2/global.yaml
       warm: bundles/0.2/warm.yaml
       neutral: bundles/0.2/neutral.yaml
+      supportive_practical: bundles/0.2/supportive_practical.yaml
       stage_0: bundles/0.2/stage_0_onboarding.yaml
       stage_1: bundles/0.2/stage_1_assess.yaml
       stage_2: bundles/0.2/stage_2_triggers.yaml
@@ -33,6 +35,7 @@ bundles:
       global: global.yaml
       warm: warm.yaml
       neutral: neutral.yaml
+      supportive_practical: supportive_practical.yaml
       stage_0: stage_0_onboarding.yaml
       stage_1: stage_1_assess.yaml
       stage_2: stage_2_triggers.yaml

@@ -33,6 +33,10 @@ export interface SessionState {
   chat_section_1_to_4?: number | null;
   max_user_turns_current_stage?: number | null;
   stage1_feedback_card?: Record<string, unknown> | null;
+  study_target_assistant_turns_min?: number | null;
+  study_target_assistant_turns_max?: number | null;
+  llm_api_type_label?: string | null;
+  assistant_turns_so_far?: number | null;
 }
 
 /** 浏览器中展示的一条聊天消息。 */

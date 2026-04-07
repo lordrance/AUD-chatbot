@@ -111,7 +111,7 @@ def _randomize_forced(client: Any, settings_mod: Any, sid: str, token: str, arm:
         rz = client.post(f"/api/v1/sessions/{sid}/randomize", headers=h)
         assert rz.status_code == 200, rz.text
         got = rz.json()["arm"]
-        assert got == arm, f"期望 arm={arm}，实际 {got}（请确认 simulation 开关生效）"
+        assert got == arm, f"Expected arm={arm}, got {got} (verify simulation switch is active)"
         return got
     finally:
         settings_mod.simulation_mode = False
@@ -165,46 +165,46 @@ def _write_transcript(path: Path, turns: list[dict[str, Any]]) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="SafeChat-AUD 离线批量转写与 Prompt QA")
+    parser = argparse.ArgumentParser(description="SafeChat-AUD offline batch transcript + prompt QA")
     parser.add_argument(
         "--output",
         type=Path,
         default=None,
-        help="输出目录（默认 eval/output/<UTC 时间戳>）",
+        help="Output directory (default: eval/output/<UTC timestamp>)",
     )
-    parser.add_argument("--runs-per-arm", type=int, default=2, help="每个 persona 每臂重复次数（2–3 推荐）")
+    parser.add_argument("--runs-per-arm", type=int, default=2, help="Runs per persona/arm (2-3 recommended)")
     parser.add_argument(
         "--max-personas",
         type=int,
         default=0,
-        help="仅跑前 N 个 persona（0=不限制；用于冒烟等小批量）",
+        help="Run first N personas only (0=no limit; useful for smoke batches)",
     )
     parser.add_argument("--personas", type=Path, default=EVAL_DIR / "personas.yaml")
-    parser.add_argument("--persona-ids", nargs="*", default=None, help="仅跑指定 persona id")
+    parser.add_argument("--persona-ids", nargs="*", default=None, help="Run only specified persona IDs")
     parser.add_argument(
         "--stub-llm",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="默认清空 OPENAI_API_KEY 走 stub；--no-stub-llm 使用环境变量中的真实密钥",
+        help="Default uses stub by clearing API keys; --no-stub-llm uses real keys from env",
     )
     parser.add_argument(
         "--prompt-bundle-version",
         type=str,
         default=None,
-        help="写入 PROMPT_BUNDLE_VERSION 后再导入 app（默认用 constants / 环境变量）",
+        help="Set PROMPT_BUNDLE_VERSION before importing app (otherwise constants/env default)",
     )
     args = parser.parse_args()
 
     if args.runs_per_arm < 1 or args.runs_per_arm > 5:
-        print("runs-per-arm 建议 1–5", file=sys.stderr)
+        print("runs-per-arm should be in 1-5", file=sys.stderr)
         return 2
 
     if args.max_personas < 0:
-        print("--max-personas 须 >= 0", file=sys.stderr)
+        print("--max-personas must be >= 0", file=sys.stderr)
         return 2
 
     if not os.getenv("DATABASE_URL") and not os.getenv("TEST_DATABASE_URL"):
-        print("请设置 DATABASE_URL（或 TEST_DATABASE_URL）指向已 migrate 的 PostgreSQL。", file=sys.stderr)
+        print("Set DATABASE_URL (or TEST_DATABASE_URL) to a migrated PostgreSQL.", file=sys.stderr)
         return 2
 
     if args.prompt_bundle_version:
@@ -262,12 +262,12 @@ def main() -> int:
         personas = [p for p in personas if p["id"] in wanted]
         missing = wanted - {p["id"] for p in personas}
         if missing:
-            print(f"未找到 persona: {missing}", file=sys.stderr)
+            print(f"Missing personas: {missing}", file=sys.stderr)
             return 2
     if args.max_personas > 0:
         personas = personas[: args.max_personas]
 
-    arms = ("empathic", "neutral")
+    arms = ("neutral_professional", "supportive_practical", "warm_empathic", "empathic", "neutral")
     csv_fieldnames: list[str] | None = None
     summary_rows: list[dict[str, Any]] = []
 
@@ -289,7 +289,7 @@ def main() -> int:
                 user_turns = list(persona.get("user_turns") or [])
                 if len(user_turns) != EXPECTED_CHAT_USER_TURNS:
                     print(
-                        f"警告: persona {pid} user_turns={len(user_turns)}，需要 {EXPECTED_CHAT_USER_TURNS}；使用默认序列",
+                        f"Warning: persona {pid} user_turns={len(user_turns)}; expected {EXPECTED_CHAT_USER_TURNS}. Falling back to defaults.",
                         file=sys.stderr,
                     )
                     user_turns = DEFAULT_CHAT_USER_TURNS
@@ -413,7 +413,7 @@ def main() -> int:
         json.dumps(run_manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    print(f"完成：{out_root}")
+    print(f"Done: {out_root}")
     return 0
 
 

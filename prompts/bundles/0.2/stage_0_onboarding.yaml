@@ -13,3 +13,10 @@ neutral:
     preferred_name: "Please enter your preferred name or nickname for this session."
     orientation_ack: "This is a ~20–25 minute research chat (text only; not treatment or crisis support). Please confirm you understand."
     ready_to_start: "Please confirm you are ready to start now (yes/no or a short note)."
+supportive_practical:
+  transition: "Good. Next we'll map your recent drinking pattern and your top reason to cut down—small steps."
+  stage_hint: "Brief validation OK; keep questions concrete and one at a time."
+  slots:
+    preferred_name: "What should we call you? First name or nickname is fine."
+    orientation_ack: "This is a research chat (about 20–25 minutes), not treatment or emergency care. It includes safety rules and you can skip a question. In one short line, please confirm you understand."
+    ready_to_start: "When you're ready, reply yes to start—or a short note if you need a moment."

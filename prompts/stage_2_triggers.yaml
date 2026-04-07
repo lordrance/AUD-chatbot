@@ -19,3 +19,13 @@ neutral:
     time: "When does this situation tend to occur (time of day, day of week, etc.)?"
     emotion_or_internal_state: "What emotions or internal state show up right before you drink there?"
     cue_or_trigger: "What cue or trigger most strongly leads to drinking in that situation?"
+supportive_practical:
+  transition: "Great—next we'll pick one small strategy and turn it into a simple if–then you can try."
+  stage_hint: "Normalize briefly if useful; keep one clear question per turn."
+  slots:
+    target_high_risk_situation: "Where do you most often drink more than you want—one situation to focus on?"
+    people: "In that situation, who is usually around (or who matters there)?"
+    place: "Where does it usually happen?"
+    time: "What time or part of the week does it most often start?"
+    emotion_or_internal_state: "Right before you drink there, what's usually going on inside—stress, boredom, relief?"
+    cue_or_trigger: "What's the clearest trigger that makes the first drink most likely?"

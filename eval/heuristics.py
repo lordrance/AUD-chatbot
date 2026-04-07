@@ -46,7 +46,9 @@ def analyze_run(
     assistants = _assistant_lines(transcript_turns)
     full_text = "\n".join(assistants)
 
-    style_leakage = bool(arm == "neutral" and _EMPATHIC_LEAK_IN_NEUTRAL.search(full_text))
+    style_leakage = bool(
+        arm in ("neutral", "neutral_professional") and _EMPATHIC_LEAK_IN_NEUTRAL.search(full_text)
+    )
 
     repetitive_or_scripted = False
     if len(assistants) >= 3:

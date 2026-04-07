@@ -22,6 +22,8 @@ def test_load_default_bundle() -> None:
     assert "notes" in b.global_data or "product" in b.global_data
     assert b.stages[0]["warm"]["slots"]["preferred_name"]
     assert b.stages[0]["warm"]["slots"]["orientation_ack"]
+    assert b.supportive_practical.get("style") == "supportive_practical"
+    assert b.stages[0]["supportive_practical"]["slots"]["preferred_name"]
 
 
 def test_load_by_version_only() -> None:

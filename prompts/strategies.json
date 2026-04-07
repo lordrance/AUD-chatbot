@@ -1,63 +1,62 @@
 {
-  "version": "0.2",
-  "description": "SafeChat-AUD brief, low-risk coping strategies for Stage 3 and LLM selected_strategy_ids. Not medical advice.",
-  "usage": "Each item has strategy_id; the model may output 0–2 ids when relevant. assistant_text stays one question, short.",
+  "version": "0.3",
+  "description": "Eight low-risk coping strategies (answer2.pdf). Server offers at most 2 per turn for selected_strategy; IDs are fixed for analysis.",
   "strategies": [
     {
       "strategy_id": "delay_first_drink",
-      "name": "Delay the first drink",
-      "suitable_for": ["Automatic pour at a usual time", "Social pressure starting early"],
-      "not_for": ["Acute withdrawal signs", "Unsupervised abrupt cessation when clinically unsafe"],
-      "example_if_then_format": "If I want a drink at 8pm, I'll leave the bottle in the kitchen and shower for 10 minutes first."
+      "name": "Delay the first drink by ~15 minutes",
+      "suitable_for": ["Automatic pour after work", "Home alone craving"],
+      "not_for": ["Acute withdrawal"],
+      "example_if_then_format": "If I walk in wanting a drink, I'll shower first and wait 15 minutes before deciding."
     },
     {
       "strategy_id": "alternate_with_water",
-      "name": "One alcoholic drink, one water",
-      "suitable_for": ["Parties or dinners where you want to slow pace"],
-      "not_for": ["If water does not slow intake and risk escalates"],
-      "example_if_then_format": "If someone pushes a drink, I'll drink half a glass of water before each sip of alcohol."
+      "name": "Alternate alcohol with water",
+      "suitable_for": ["Social dinners", "Slowing pace"],
+      "not_for": [],
+      "example_if_then_format": "If round two starts, I'll drink a full glass of water between each alcoholic drink."
     },
     {
-      "strategy_id": "text_support_person",
-      "name": "Text a support person",
-      "suitable_for": ["Stress or loneliness spikes", "You have a trusted contact"],
-      "not_for": ["No safe contact or contact worsens conflict"],
-      "example_if_then_format": "If I crave a drink after work, I'll text ___ 'rough day—two minutes?' and wait 10 minutes before deciding."
+      "strategy_id": "out_of_sight_home",
+      "name": "Keep alcohol out of sight at home",
+      "suitable_for": ["Visual cues on the counter or fridge"],
+      "not_for": [],
+      "example_if_then_format": "If I sit down at night, I'll put bottles in a cabinet and keep only NA options visible."
     },
     {
-      "strategy_id": "fifteen_min_substitute",
-      "name": "15-minute substitute activity",
-      "suitable_for": ["Short urges that ease with distraction"],
-      "not_for": ["Suicidal ideation or crisis—use emergency resources"],
-      "example_if_then_format": "If I head to the fridge for alcohol, I'll walk outside for 15 minutes or listen to one podcast episode first."
+      "strategy_id": "planned_leave_time",
+      "name": "Plan a leave time before you go out",
+      "suitable_for": ["Risk rises after a certain round"],
+      "not_for": ["Unsafe to leave"],
+      "example_if_then_format": "If it's a work dinner, I'll plan to leave by 9pm before I arrive."
     },
     {
-      "strategy_id": "non_alcoholic_substitute",
-      "name": "Non-alcoholic substitute",
-      "suitable_for": ["Need a glass in hand at social events"],
-      "not_for": ["Allergy or strong aversion to substitutes"],
-      "example_if_then_format": "If a client toasts, I'll order a non-alcoholic beer or soda and use a brief excuse."
+      "strategy_id": "text_friend_before",
+      "name": "Text a friend before the risky stretch",
+      "suitable_for": ["Loneliness or stress spikes", "You have a safe contact"],
+      "not_for": [],
+      "example_if_then_format": "If it's Friday after work, I'll text ___ 'two-minute check-in?' before the first drink."
     },
     {
-      "strategy_id": "leave_occasion_early",
-      "name": "Leave the setting earlier",
-      "suitable_for": ["You can exit safely", "Risk rises after a certain round"],
-      "not_for": ["Cannot leave and needs a different plan"],
-      "example_if_then_format": "If round two starts to hit hard, I'll leave by 9pm using 'early meeting tomorrow.'"
+      "strategy_id": "bring_na_beverage",
+      "name": "Bring a non-alcoholic drink you like",
+      "suitable_for": ["Parties", "Want something in hand"],
+      "not_for": [],
+      "example_if_then_format": "If there's a party, I'll bring sparkling water so I already have a full glass."
     },
     {
-      "strategy_id": "remove_alcohol_from_sight",
-      "name": "Keep alcohol out of sight",
-      "suitable_for": ["Home drinking habit with strong visual cues"],
-      "not_for": ["Household conflict if moving bottles"],
-      "example_if_then_format": "If I sit on the couch after dinner, I'll store bottles in a cabinet and keep only NA drinks visible."
+      "strategy_id": "refuse_script",
+      "name": "Practice one short line to refuse or slow down",
+      "suitable_for": ["Peer pressure", "Scripted settings"],
+      "not_for": [],
+      "example_if_then_format": "If someone pushes another round, I'll say 'I'm pacing tonight—still on this one.'"
     },
     {
-      "strategy_id": "buddy_check_in",
-      "name": "Check-in with a buddy",
-      "suitable_for": ["Want external accountability", "Stable relationship with peer"],
-      "not_for": ["Privacy concerns about sharing drinking goals"],
-      "example_if_then_format": "If it's a risky Friday, I'll text ___ 'green/yellow/red' at 8pm before ordering another round."
+      "strategy_id": "first_urge_substitute",
+      "name": "Substitute a fixed action for the first urge (walk/shower/snack/tea)",
+      "suitable_for": ["Short urges", "First-drink moment"],
+      "not_for": [],
+      "example_if_then_format": "If the first urge hits, I'll walk around the block before opening anything."
     }
   ]
 }

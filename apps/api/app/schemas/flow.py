@@ -182,6 +182,23 @@ class SessionStateResponse(BaseModel):
         default=None,
         description="When status is stage1_feedback_pending: baseline drinks + Stage1 slot recap.",
     )
+    study_target_assistant_turns_min: int | None = Field(
+        default=None,
+        description="Protocol target min assistant turns (answer2.pdf reporting).",
+    )
+    study_target_assistant_turns_max: int | None = Field(
+        default=None,
+        description="Protocol target max assistant turns (answer2.pdf reporting).",
+    )
+    llm_api_type_label: str | None = Field(
+        default=None,
+        description="LLM transport label for audit (e.g. chat_completions).",
+    )
+    assistant_turns_so_far: int | None = Field(
+        default=None,
+        ge=0,
+        description="Count of assistant chat_turn rows so far (vs study_target_assistant_turns_*).",
+    )
 
 
 class PostSurveySubmit(BaseModel):
@@ -205,6 +222,11 @@ class PostSurveySubmit(BaseModel):
     change_intention_1_5: int = Field(ge=1, le=5)
     manipulation_felt_warm_1_5: int = Field(ge=1, le=5)
     manipulation_felt_professional_1_5: int = Field(ge=1, le=5)
+    manipulation_felt_practical_actionable_1_5: int = Field(
+        ge=1,
+        le=5,
+        description="Higher = more practical/problem-solving and actionable (manipulation check for condition B)",
+    )
     manipulation_understood_feelings_1_5: int = Field(ge=1, le=5)
     manipulation_felt_repetitive_1_5: int = Field(ge=1, le=5, description="Higher = more repetitive/scripted")
     manipulation_felt_personal_tailored_1_5: int = Field(ge=1, le=5)

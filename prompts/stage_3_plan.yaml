@@ -23,3 +23,15 @@ neutral:
     final_confidence_0_10: "Rate 0–10 how confident you are you can follow this plan soon."
     if_then_plan_revised: "Confidence was under 7. Please rewrite a smaller if–then plan that feels more doable."
     final_confidence_0_10_after_shrink: "Rate 0–10 how confident you are in this revised smaller plan."
+supportive_practical:
+  transition: "Nice work. Next we'll lock a tiny if–then and a backup—then a quick confidence check."
+  stage_hint: "Use only strategies from the server-shown library; one actionable plan; shrink if confidence <7."
+  slots:
+    selected_target_situation: "In one short phrase, which situation is this plan for?"
+    selected_strategy: "Which one strategy from the ideas we offered do you want to try first—or your own one-line label?"
+    if_then_plan: "Say it in one line: \"If ___, then I will ___.\" (keep it very small.)"
+    obstacle: "What is the likeliest thing that could derail this?"
+    workaround: "What one backup move could help if that obstacle shows up?"
+    final_confidence_0_10: "0–10: how confident are you you can do this in the next few days?"
+    if_then_plan_revised: "Confidence was under 7—please shrink the plan to one easier micro-step (same if–then format)."
+    final_confidence_0_10_after_shrink: "0–10: how confident are you now in this smaller plan?"

@@ -13,6 +13,13 @@ import { progressStepForPath } from "../flow";
 const MSG_KEY = (id: string) => `safechat_aud_msgs_${id}`;
 const PENDING_ASST_KEY = (id: string) => `safechat_aud_pending_asst_${id}`;
 
+/** 非阻塞 UI 遥测（失败静默）。 */
+function emitUiEvent(event_type: string, event_value?: string | null) {
+  const s = loadSession();
+  if (!s) return;
+  void api.postUiEvent(s.sessionId, s.token, { event_type, event_value: event_value ?? undefined }).catch(() => {});
+}
+
 const QUICK: Record<string, string[]> = {
   "0:preferred_name": ["Alex", "Sam"],
   "0:orientation_ack": ["I understand", "I've read it—let's continue"],
@@ -76,6 +83,14 @@ export function ChatPage() {
   }, [messages]);
 
   useEffect(() => {
+    const onVis = () => {
+      emitUiEvent(document.hidden ? "tab_hidden" : "tab_visible");
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
+  useEffect(() => {
     const s = loadSession();
     if (!s) {
       navigate("/");
@@ -135,6 +150,7 @@ export function ChatPage() {
     if (!t) return;
     const s = loadSession();
     if (!s) return;
+    emitUiEvent(t === "(skip)" ? "skip_turn" : "user_send");
     setBusy(true);
     setErr(null);
     const userMsg: ChatMessage = { role: "user", text: t };
@@ -229,6 +245,7 @@ export function ChatPage() {
                 className="chip"
                 disabled={busy}
                 onClick={() => {
+                  emitUiEvent("quick_reply_chip_click", q.length > 200 ? `${q.slice(0, 200)}…` : q);
                   setInput(q);
                 }}
               >

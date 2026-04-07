@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 45.0
     llm_max_retries: int = 2
 
-    # 批量/离线评测：仅当 simulation_mode 为真且 force_arm 为 empathic|neutral 时，随机分组固定该臂
+    # 批量/离线评测：simulation_force_arm 可为三规范臂或旧 empathic|neutral
     simulation_mode: bool = Field(
         default=False,
         validation_alias=AliasChoices("SAFECHAT_SIMULATION_MODE", "simulation_mode"),
@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     simulation_force_arm: str | None = Field(
         default=None,
         validation_alias=AliasChoices("SAFECHAT_SIMULATION_FORCE_ARM", "simulation_force_arm"),
+    )
+    # three_arm：1:1:1 分配到 neutral_professional / supportive_practical / warm_empathic
+    # two_arm_ac：仅 A 与 C（Neutral/Professional vs Warm/Empathic）
+    randomization_mode: str = Field(
+        default="three_arm",
+        validation_alias=AliasChoices("SAFECHAT_RANDOMIZATION_MODE", "randomization_mode"),
     )
 
 

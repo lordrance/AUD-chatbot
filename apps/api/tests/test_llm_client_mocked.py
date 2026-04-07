@@ -16,6 +16,10 @@ def _valid_payload() -> str:
             "selected_strategy_ids": ["s1"],
             "safety_level": 0,
             "needs_human_review": False,
+            "dialogue_acts": ["open_question"],
+            "next_action": "ask_followup",
+            "model_reported_stage": "stage1",
+            "risk": {"level": 0, "reason": None},
         },
         ensure_ascii=False,
     )

@@ -5,15 +5,18 @@
 import secrets
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.config import settings
 from app.constants import (
+    LLM_API_TYPE_LABEL,
+    STUDY_TARGET_ASSISTANT_TURNS_MAX,
+    STUDY_TARGET_ASSISTANT_TURNS_MIN,
     SURVEY_SCHEMA_BASELINE,
     SURVEY_SCHEMA_CONSENT,
     SURVEY_SCHEMA_ELIGIBILITY,
@@ -43,7 +46,9 @@ from app.schemas.flow import (
     SessionStateResponse,
     Stage1FeedbackContinueResponse,
 )
+from app.services.arm_styles import pick_random_arm
 from app.services.chat_summary import persist_chat_summary
+from app.services.strategy_library import strategies_payload_for_turn
 from app.services.chat_fsm import (
     first_missing_slot,
     initial_current_substate,
@@ -182,6 +187,16 @@ def _stage1_feedback_card_payload(db: OrmSession, row: SessionRecord) -> dict[st
     }
 
 
+def _assistant_turns_count(db: OrmSession, session_id: uuid.UUID) -> int:
+    """已落库的助手消息条数（用于协议 12–16 bot turns 对照与前端展示）。"""
+    q = select(func.count()).select_from(ChatTurn).where(
+        ChatTurn.session_id == session_id,
+        ChatTurn.role == "assistant",
+    )
+    n = db.scalar(q)
+    return int(n or 0)
+
+
 def _slot_snapshot_for_api(row: SessionRecord) -> tuple[str | None, dict[str, Any] | None, str | None]:
     """返回 (current_substate, slot_json, rolling_summary 截断) 供 state 接口；不适用时全 None。"""
     if row.status not in (
@@ -214,6 +229,14 @@ def _state_response(db: OrmSession, row: SessionRecord) -> SessionStateResponse:
     safety_show = sev >= 1 and row.status not in ("abandoned", "completed", "ineligible")
     safety_chat_ok = row.status in ("chat_ready", "chat_active")
     s1_card = _stage1_feedback_card_payload(db, row)
+    turn_tgt_min = STUDY_TARGET_ASSISTANT_TURNS_MIN if row.arm else None
+    turn_tgt_max = STUDY_TARGET_ASSISTANT_TURNS_MAX if row.arm else None
+    llm_lbl = LLM_API_TYPE_LABEL if row.arm else None
+    asst_turns = (
+        _assistant_turns_count(db, row.id)
+        if row.arm and row.status in ("chat_ready", "chat_active", "stage1_feedback_pending")
+        else None
+    )
     return SessionStateResponse(
         session_id=row.id,
         status=row.status,
@@ -242,6 +265,10 @@ def _state_response(db: OrmSession, row: SessionRecord) -> SessionStateResponse:
         chat_section_1_to_4=_chat_section_1_to_4(row),
         max_user_turns_current_stage=_max_user_turns_current_stage(row),
         stage1_feedback_card=s1_card,
+        study_target_assistant_turns_min=turn_tgt_min,
+        study_target_assistant_turns_max=turn_tgt_max,
+        llm_api_type_label=llm_lbl,
+        assistant_turns_so_far=asst_turns,
     )
 
 
@@ -256,6 +283,18 @@ class ChatTurnBody(BaseModel):
     """单轮聊天请求体：用户输入文本。"""
 
     text: str = Field(min_length=1, max_length=8000)
+
+
+class UiEventBody(BaseModel):
+    """前端 UI 遥测（写入审计事件，供参与度与流失分析）。"""
+
+    event_type: str = Field(min_length=1, max_length=64)
+    event_value: str | None = Field(default=None, max_length=500)
+    turn_index: int | None = None
+
+
+class UiEventOkResponse(BaseModel):
+    ok: Literal[True] = True
 
 
 def _recent_turns_transcript(db: OrmSession, session_id: uuid.UUID, limit: int = 14) -> str:
@@ -304,6 +343,30 @@ def get_state(
     db.add(row)
     db.commit()
     return _state_response(db, row)
+
+
+@router.post("/{session_id}/instrument/ui-event", response_model=UiEventOkResponse)
+def post_ui_event(
+    body: UiEventBody,
+    row: SessionRecord = Depends(get_current_session),
+    db: OrmSession = Depends(get_db),
+) -> UiEventOkResponse:
+    """记录 UI 事件（focus、send、quick_reply、blur 等）；落 audit_events 便于导出分析。"""
+    _record_audit(
+        db,
+        row.id,
+        "ui_event",
+        {
+            "event_type": body.event_type,
+            "event_value": body.event_value,
+            "turn_index": body.turn_index,
+            "received_at": datetime.now(timezone.utc).isoformat(),
+            "fsm_stage": row.fsm_stage,
+        },
+    )
+    _touch_activity(row)
+    db.commit()
+    return UiEventOkResponse(ok=True)
 
 
 @router.post("/{session_id}/consent", response_model=ConsentOkResponse)
@@ -556,15 +619,7 @@ def post_randomize(
             },
         )
 
-    forced = (
-        settings.simulation_mode
-        and settings.simulation_force_arm in ("empathic", "neutral")
-    )
-    arm = (
-        settings.simulation_force_arm
-        if forced
-        else ("empathic" if secrets.randbelow(2) == 0 else "neutral")
-    )
+    arm = pick_random_arm()
     row.arm = arm
     row.status = "chat_ready"
     _reset_chat_counters(row)
@@ -575,7 +630,12 @@ def post_randomize(
         db,
         row.id,
         "randomized",
-        {"arm": arm, "prompt_version": bundle.version_ref},
+        {
+            "arm": arm,
+            "prompt_version": bundle.version_ref,
+            "randomization_mode": settings.randomization_mode,
+            "strategy_library_version": load_strategies_placeholder().get("version"),
+        },
     )
     db.commit()
     return RandomizeOkResponse(status=row.status, arm=arm, already_assigned=False)
@@ -829,11 +889,18 @@ def post_chat_turn(
         llm_res = None
     elif llm_attempted:
         recent = _recent_turns_transcript(db, row.id)
-        strategies = load_strategies_placeholder()
+        strategies_full = load_strategies_placeholder()
         next_slot_for_prompt = (
             next_ask if mode == "next_slot" else (first_next if mode == "transition" else None)
         )
         trans_stage = nxt if mode == "transition" else None
+        strategies = strategies_payload_for_turn(
+            strategies_full,
+            stage_at_turn=st,
+            next_slot_id=next_slot_for_prompt,
+            slot_json=slots,
+            session_id=row.id,
+        )
         messages = build_turn_messages(
             bundle=bundle,
             arm=row.arm or "",
@@ -918,11 +985,17 @@ def post_chat_turn(
             stub_meta["llm_output_tokens"] = llm_res.output_tokens
             stub_meta["llm_total_tokens"] = llm_res.total_tokens
             if llm_res.ok and llm_res.parsed:
-                stub_meta["model_stage_complete_advisory"] = llm_res.parsed.stage_complete
-                stub_meta["safety_level"] = llm_res.parsed.safety_level
-                stub_meta["needs_human_review"] = llm_res.parsed.needs_human_review
-                stub_meta["selected_strategy_ids"] = llm_res.parsed.selected_strategy_ids
-                stub_meta["extracted_slots"] = llm_res.parsed.extracted_slots
+                p = llm_res.parsed
+                stub_meta["model_stage_complete_advisory"] = p.stage_complete
+                stub_meta["safety_level"] = p.safety_level
+                stub_meta["needs_human_review"] = p.needs_human_review
+                stub_meta["selected_strategy_ids"] = p.selected_strategy_ids
+                stub_meta["extracted_slots"] = p.extracted_slots
+                stub_meta["dialogue_acts"] = p.dialogue_acts
+                stub_meta["next_action"] = p.next_action
+                stub_meta["model_reported_stage"] = p.model_reported_stage
+                stub_meta["llm_risk_block"] = p.risk.model_dump()
+                stub_meta["llm_api_type"] = LLM_API_TYPE_LABEL
             elif llm_res.error:
                 stub_meta["llm_error"] = llm_res.error
     else:

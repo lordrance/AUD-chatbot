@@ -150,7 +150,7 @@ def test_stage_progression_and_chat_close(client: TestClient) -> None:
 
     st_end = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
     assert st_end.get("chat_summary") is not None
-    assert st_end["chat_summary"].get("schema_version") == "2"
+    assert st_end["chat_summary"].get("schema_version") == "3"
 
 
 def test_chat_summary_persistence_has_export_keys(client: TestClient) -> None:
@@ -161,7 +161,7 @@ def test_chat_summary_persistence_has_export_keys(client: TestClient) -> None:
         _post_chat_turn_ack_stage1(client, sid, token, text)
     summary = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()["chat_summary"]
     assert summary is not None
-    assert summary.get("schema_version") == "2"
+    assert summary.get("schema_version") == "3"
     for key in (
         "top_reason",
         "top_trigger",
@@ -175,6 +175,8 @@ def test_chat_summary_persistence_has_export_keys(client: TestClient) -> None:
         "top_trigger_high_risk_situation",
         "support_focus",
         "importance_to_reduce_baseline_0_10",
+        "pdf_summary_plan",
+        "pdf_if_then_plan",
     ):
         assert key in summary
 
@@ -203,14 +205,16 @@ def test_stage3_low_confidence_forces_shrink_slots(client: TestClient) -> None:
     """末段信心 <7 时必须多 2 轮才结束聊天。"""
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    turns = list(CHAT_TURNS_25)
-    # 将 Stage3 末信心改为 5，触发缩小分支
-    turns[19] = "5"
-    turns.extend(
-        [
+    # 将 Stage3 末信心改为 5，触发缩小分支；
+    # 追加的 2 轮必须紧跟 Stage3（而不是放到 Stage4 之后）。
+    turns = (
+        list(CHAT_TURNS_25[:19])
+        + ["5"]
+        + [
             "If stressed, I will wait five minutes before any drink.",
             "7",
         ]
+        + list(CHAT_TURNS_25[20:])
     )
     n = len(turns)
     assert n == 27
@@ -247,6 +251,7 @@ def _sample_post_survey_json() -> dict:
         "change_intention_1_5": 4,
         "manipulation_felt_warm_1_5": 3,
         "manipulation_felt_professional_1_5": 4,
+        "manipulation_felt_practical_actionable_1_5": 3,
         "manipulation_understood_feelings_1_5": 3,
         "manipulation_felt_repetitive_1_5": 2,
         "manipulation_felt_personal_tailored_1_5": 4,
@@ -331,8 +336,15 @@ def _bootstrap_to_pending_randomization(client: TestClient) -> tuple[str, str]:
 
 def test_simulation_forces_arm_on_randomize(client: TestClient) -> None:
     from app.config import settings
+    from app.services.arm_styles import canonicalize_arm
 
-    for arm in ("empathic", "neutral"):
+    for arm in (
+        "warm_empathic",
+        "neutral_professional",
+        "supportive_practical",
+        "empathic",
+        "neutral",
+    ):
         sid, token = _bootstrap_to_pending_randomization(client)
         h = _auth_headers(token)
         settings.simulation_mode = True
@@ -343,7 +355,7 @@ def test_simulation_forces_arm_on_randomize(client: TestClient) -> None:
             settings.simulation_mode = False
             settings.simulation_force_arm = None
         assert rz.status_code == 200, rz.text
-        assert rz.json()["arm"] == arm
+        assert rz.json()["arm"] == canonicalize_arm(arm)
 
 
 def test_followup_public_token_open_and_submit(client: TestClient) -> None:

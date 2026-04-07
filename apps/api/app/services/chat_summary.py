@@ -12,7 +12,7 @@ from app.models.session import SessionRecord
 from app.models.survey_response import SurveyResponse
 from app.services.chat_fsm import parse_rating_0_10, qualified_slot_key
 
-CHAT_SUMMARY_SCHEMA_VERSION = "2"
+CHAT_SUMMARY_SCHEMA_VERSION = "3"
 
 
 def _slot(slots: dict[str, Any], stage: int, key: str) -> str | None:
@@ -87,6 +87,11 @@ def build_chat_summary_dict(row: SessionRecord, db: OrmSession) -> dict[str, Any
     if conf_close is not None:
         conf_parts.append(f"Closing confidence {conf_close}/10")
 
+    imp1 = parse_rating_0_10(slots.get(qualified_slot_key(1, "importance_rating_0_10")))
+    conf1 = parse_rating_0_10(slots.get(qualified_slot_key(1, "confidence_rating_0_10")))
+    obst = _slot(slots, 3, "obstacle")
+    wk = _slot(slots, 3, "workaround")
+
     return {
         "schema_version": CHAT_SUMMARY_SCHEMA_VERSION,
         "preferred_name": preferred_name,
@@ -101,6 +106,26 @@ def build_chat_summary_dict(row: SessionRecord, db: OrmSession) -> dict[str, Any
         "change_readiness_baseline_1_10": readiness,
         "importance_to_reduce_baseline_0_10": importance_baseline,
         "confidence_summary": "；".join(conf_parts) if conf_parts else None,
+        # answer2.pdf 命名（与内部槽位对照，便于论文表）
+        "pdf_recent_drinking_pattern": _slot(slots, 1, "recent_pattern"),
+        "pdf_most_concerning_episode": _slot(slots, 1, "most_concerning_episode"),
+        "pdf_top_reason_to_cut_down": reason_s1,
+        "pdf_importance_0_10": imp1,
+        "pdf_confidence_0_10": conf1,
+        "pdf_target_situation": _slot(slots, 2, "target_high_risk_situation"),
+        "pdf_where": _slot(slots, 2, "place"),
+        "pdf_when": _slot(slots, 2, "time"),
+        "pdf_who_with": _slot(slots, 2, "people"),
+        "pdf_emotion_or_state": _slot(slots, 2, "emotion_or_internal_state"),
+        "pdf_immediate_trigger": _slot(slots, 2, "cue_or_trigger"),
+        "pdf_selected_strategy": strategy,
+        "pdf_if_then_plan": micro_plan,
+        "pdf_likely_obstacle": obst,
+        "pdf_workaround": wk,
+        "pdf_summary_reason": top_reason,
+        "pdf_summary_trigger": top_trigger,
+        "pdf_summary_plan": chosen_plan,
+        "pdf_summary_confidence": conf_close,
         # Legacy keys (v1 export) for existing notebooks / specs
         "top_reason_to_cut_down": top_reason,
         "top_trigger_high_risk_situation": top_trigger,

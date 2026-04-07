@@ -184,6 +184,22 @@ export async function postFollowUpSurvey(
   return resBody as { ok: true };
 }
 
+/** POST 研究 UI 事件（写入服务端审计队列）。 */
+export async function postUiEvent(
+  sessionId: string,
+  token: string,
+  body: { event_type: string; event_value?: string | null; turn_index?: number | null },
+) {
+  const r = await fetch(`${B}/sessions/${sessionId}/instrument/ui-event`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const resBody = await r.json().catch(() => ({}));
+  if (!r.ok) throw new HttpError(typeof resBody === "string" ? resBody : JSON.stringify(resBody), r.status, resBody);
+  return resBody as { ok: true };
+}
+
 /** POST 后测问卷。 */
 export async function postPostSurvey(sessionId: string, token: string, body: Record<string, unknown>) {
   const r = await fetch(`${B}/sessions/${sessionId}/surveys/post`, {

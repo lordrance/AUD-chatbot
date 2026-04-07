@@ -39,18 +39,18 @@ def _multi_question_heuristic(transcript_path: Path, batch_root: Path) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="冒烟批次摘要 Markdown")
+    ap = argparse.ArgumentParser(description="Smoke batch summary Markdown")
     ap.add_argument("--batch-dir", type=Path, required=True)
     ap.add_argument(
         "--out-md",
         type=Path,
         default=None,
-        help="写入 Markdown（默认 <batch-dir>/smoke_summary.md）",
+        help="Output Markdown path (default: <batch-dir>/smoke_summary.md)",
     )
     args = ap.parse_args()
     root = args.batch_dir.resolve()
     if not root.is_dir():
-        print(f"目录不存在: {root}", file=sys.stderr)
+        print(f"Directory does not exist: {root}", file=sys.stderr)
         return 2
 
     summary = _load_jsonl(root / "summary.jsonl")
@@ -76,32 +76,32 @@ def main() -> int:
     note_quota = ""
     if n > 0 and manifest.get("stub_llm") is False and total_fb >= n * 7:
         note_quota = (
-            "\n> **提示**：`fallback_used` 很高且 `stub_llm=false` 时，常见原因是 **Gemini/Google 429 配额** 或 API 错误；"
-            "请在 DB 表 `llm_calls.error_message` 或路由返回的 `llm_error` 元数据中确认，非结构化 JSON 解析问题。\n"
+            "\n> **Tip**: when `fallback_used` is high and `stub_llm=false`, the common cause is **Gemini/Google 429 quota** "
+            "or API errors; check `llm_calls.error_message` or route-level `llm_error` metadata rather than JSON parsing.\n"
         )
 
     lines: list[str] = [
-        "# Gemini / LLM 冒烟摘要",
+        "# Gemini / LLM Smoke Summary",
         "",
-        f"- **批次目录**: `{root}`",
+        f"- **Batch directory**: `{root}`",
         f"- **sessions**: {n}",
         f"- **run_manifest**: `{manifest.get('llm_provider', '?')}` / model `{manifest.get('effective_llm_model', '?')}`",
         note_quota.rstrip(),
         "",
-        "## 聚合指标",
+        "## Aggregated Metrics",
         "",
-        f"| 指标 | 值 |",
+        f"| Metric | Value |",
         f"|------|-----|",
         f"| completed_all_stages | {completed} / {n} |",
-        f"| fallback_used（总次数，跨轮累加） | {total_fb} |",
-        f"| invalid_json_count（总次数） | {total_inv} |",
-        f"| failure_log style_leakage（启发式） | {style_leaks} |",
+        f"| fallback_used (total count across turns) | {total_fb} |",
+        f"| invalid_json_count (total count) | {total_inv} |",
+        f"| failure_log style_leakage (heuristic) | {style_leaks} |",
         f"| failure_log weak_stage_3_micro_plan | {weak_plan} |",
-        f"| 转写中「单轮 ≥2 问号」轮次数（粗判多问题） | {multi_q_turns} |",
+        f"| transcript turns with >=2 question marks (rough multi-question heuristic) | {multi_q_turns} |",
         "",
-        "## 说明",
+        "## Notes",
         "",
-        "启发式标记不能替代人工读 `transcripts/*.txt`；`failure_log.jsonl` 含逐条详情。",
+        "Heuristic flags are not a substitute for manual review of `transcripts/*.txt`; see `failure_log.jsonl` for per-run details.",
         "",
     ]
 
