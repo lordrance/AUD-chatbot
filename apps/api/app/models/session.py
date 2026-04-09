@@ -24,6 +24,7 @@ class SessionRecord(Base):
     fsm_stage: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     dropout_stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
     prompt_bundle_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    session_meta_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -61,6 +62,9 @@ class SessionRecord(Base):
     )
     llm_calls: Mapped[list["LlmCall"]] = relationship(
         "LlmCall", back_populates="session", cascade="all, delete-orphan"
+    )
+    stage_state_events: Mapped[list["StageStateEvent"]] = relationship(
+        "StageStateEvent", back_populates="session", cascade="all, delete-orphan"
     )
     followup: Mapped["SessionFollowup | None"] = relationship(
         "SessionFollowup",

@@ -113,7 +113,7 @@ def test_in_chat_severity2_ends_to_post_survey_pending(client: TestClient) -> No
     st = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
     assert st["post_survey_unlocked"] is True
     assert st.get("chat_summary") is not None
-    assert st["chat_summary"].get("schema_version") == "3"
+    assert st["chat_summary"].get("schema_version") == "4"
 
 
 def test_in_chat_severity3_abandoned(client: TestClient) -> None:

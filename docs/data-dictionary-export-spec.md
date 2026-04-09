@@ -23,6 +23,7 @@
 | `slot_json` | JSONB | FSM 槽位原文；**转写/对话结构化输入**（见 B 节） |
 | `rolling_summary` | text | 服务端滚动摘要串（研究用轨迹压缩） |
 | **`chat_summary_json`** | JSONB \| null | **摘要卡**（聊天结束进入后测等时点写入）；结构见下文 **D** |
+| **`session_meta_json`** | JSONB | 会话级版本与观测字段：`model_id`、`api_type`、`store_flag`、`global/style/stage_prompt_version`、`strategy_library_version`、`frontend_build`、`backend_build` |
 | `safety_max_severity` | int | 0–3 |
 | `safety_last_routing_action` | 字符串 \| null | 如 `CONTINUE`、`SHOW_RESOURCES_AND_END_CHAT`、`EMERGENCY_STOP` |
 | `safety_flags` | JSONB 数组 | 各次扫描事件条目（含 `phase`、`codes`、`severity` 等） |
@@ -70,20 +71,23 @@
 | **`model_version`** | 模型标识字符串 |
 | `latency_ms` | 调用耗时 |
 | `prompt_tokens` / `completion_tokens` / `total_tokens` | 可空 |
-| `success` / `fallback_used` / `error_message` | 成功与否与回退 |
+| `api_type` | `responses` / `chat_completions_fallback` 等 |
+| `previous_response_id` | Responses API 上下文链路（可空） |
+| `success` / `fallback_used` / `fallback_reason` / `error_message` | 成功与否与回退 |
+| `retry_count` / `finish_reason` / `refusal_flag` | 调用重试与终止信息 |
 | `normalized_output` / `raw_content` | 结构化/原始输出（成功时 `normalized_output` 为 **`LlmTurnStructuredOutput`** 的 JSON，含 `dialogue_acts`、`risk`、`next_action` 等；体积可能大） |
 
 ---
 
 ## D. 结构化摘要卡（`sessions.chat_summary_json`）
 
-由 `app/services/chat_summary.py` 生成，`schema_version` 当前为 **`"3"`**（与常量 `CHAT_SUMMARY_SCHEMA_VERSION` 一致）。
+由 `app/services/chat_summary.py` 生成，`schema_version` 当前为 **`"4"`**（与常量 `CHAT_SUMMARY_SCHEMA_VERSION` 一致）。
 
 | JSON 键 | 说明 |
 |---------|------|
-| `schema_version` | `"3"` |
-| `preferred_name`, `top_reason`, `top_trigger`, `chosen_plan` | Stage 0–4 槽位聚合 |
-| `closing_confidence_0_10`, `optional_takeaway` | Stage 4 |
+| `schema_version` | `"4"` |
+| `preferred_name`, `summary_reason`, `summary_trigger`, `summary_plan` | Stage 0–4 槽位聚合 |
+| `summary_confidence`, `optional_takeaway` | Stage 4 |
 | `selected_strategy`, `trigger_context`, `micro_plan_if_then` | Stage 2–3 |
 | `change_readiness_baseline_1_10`, `importance_to_reduce_baseline_0_10` | 来自基线问卷 |
 | `confidence_summary` | 可读摘要（基线 + 各阶段信心）；可空 |
@@ -155,18 +159,35 @@
 
 ---
 
-## H. 过程审计（`audit_events`）
+## H. 阶段状态快照（`stage_state_events`）
 
 | 字段 | 说明 |
 |------|------|
-| `event_type` | 如 `session_created`、`randomized`、`chat_completed`、`stage_transition`、`safety_routing_transition`、`ui_event`、`followup_opt_in` |
-| `payload` | JSONB；当审计行 `event_type` 为 **`ui_event`** 时，payload 内另有字段 **`event_type`**（交互子类型，如 `user_send`）、`event_value`、`fsm_stage`、`received_at` 等；安全相关事件常含 `routing_action`、`severity`、`phase` 等 |
-
-**前端 UI 事件（`event_type=ui_event`）**：典型子类型包括 `user_send`、`skip_turn`、`quick_reply_chip_click`、`tab_hidden` / `tab_visible`（见 `apps/web` ChatPage → `POST .../instrument/ui-event`）。
+| `session_id` | FK |
+| `turn_index` | 对应 chat_turn 序号 |
+| `current_stage` | 快照时阶段 |
+| `slots_json` | 当时槽位全量 |
+| `stage_complete` | 当前阶段是否已满 |
+| `reason_for_transition` | `slot_update` / `stage_complete` / `turn_budget_force_close` 等 |
+| `importance_score` / `confidence_score` | 过程评分快照 |
+| `selected_strategy_ids` | 该轮策略 id 数组 |
+| `if_then_plan` | 当前 if–then 文本 |
+| `rolling_summary` | 截断摘要 |
 
 ---
 
-## I. 导出边界小结
+## I. 过程审计（`audit_events`）
+
+| 字段 | 说明 |
+|------|------|
+| `event_type` | 如 `session_created`、`randomized`、`chat_completed`、`stage_transition`、`turn_budget_exceeded`、`safety_routing_transition`、`ui_event`、`style_fidelity_tagged`、`followup_opt_in` |
+| `payload` | JSONB；当审计行 `event_type` 为 **`ui_event`** 时，payload 内另有字段 **`event_type`**（交互子类型，如 `user_send`）、`event_value`、`fsm_stage`、`received_at` 等；安全相关事件常含 `routing_action`、`severity`、`phase` 等 |
+
+**前端 UI 事件（`event_type=ui_event`）**：典型子类型包括 `focus_input`、`send_message`、`quick_reply_click`、`skip_turn`、`page_blur`、`page_return`、`idle_timeout`、`survey_start`、`survey_submit`（见 `apps/web`）。
+
+---
+
+## J. 导出边界小结
 
 | 类别 | 主要表 / 字段 |
 |------|----------------|

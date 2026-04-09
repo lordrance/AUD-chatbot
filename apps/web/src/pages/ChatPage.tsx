@@ -14,34 +14,38 @@ const MSG_KEY = (id: string) => `safechat_aud_msgs_${id}`;
 const PENDING_ASST_KEY = (id: string) => `safechat_aud_pending_asst_${id}`;
 
 /** 非阻塞 UI 遥测（失败静默）。 */
-function emitUiEvent(event_type: string, event_value?: string | null) {
+function emitUiEvent(event_type: string, event_value?: string | null, turn_index?: number | null) {
   const s = loadSession();
   if (!s) return;
-  void api.postUiEvent(s.sessionId, s.token, { event_type, event_value: event_value ?? undefined }).catch(() => {});
+  void api
+    .postUiEvent(s.sessionId, s.token, {
+      event_type,
+      event_value: event_value ?? undefined,
+      turn_index: turn_index ?? undefined,
+    })
+    .catch(() => {});
 }
 
 const QUICK: Record<string, string[]> = {
   "0:preferred_name": ["Alex", "Sam"],
-  "0:orientation_ack": ["I understand", "I've read it—let's continue"],
   "0:ready_to_start": ["Yes, this is a good time", "I'm free now"],
-  "1:recent_pattern": ["About three or four times last week", "It varied"],
+  "1:recent_drinking_pattern": ["About three or four times last week", "It varied"],
   "1:most_concerning_episode": ["Last weekend I drank more than I wanted", "After work on Friday"],
-  "1:reason_to_cut_down": ["I want to drink less", "Mostly sleep and health"],
-  "1:importance_rating_0_10": ["7", "8"],
-  "1:confidence_rating_0_10": ["6", "7"],
-  "2:target_high_risk_situation": ["Work or social events", "When I'm home alone"],
-  "2:people": ["Coworkers", "I'm alone"],
-  "2:place": ["At home", "At a bar"],
-  "2:time": ["Friday evenings", "Late night"],
-  "2:emotion_or_internal_state": ["Stressed", "Bored"],
-  "2:cue_or_trigger": ["Seeing the bottle", "End of the workday"],
-  "3:selected_target_situation": ["Friday stress after work", "Social dinners"],
+  "1:top_reason_to_cut_down": ["I want to drink less", "Mostly sleep and health"],
+  "1:importance_0_10": ["7", "8"],
+  "1:confidence_0_10": ["6", "7"],
+  "2:target_situation": ["Work or social events", "When I'm home alone"],
+  "2:where": ["At home", "At a bar"],
+  "2:when": ["Friday evenings", "Late night"],
+  "2:who_with": ["Coworkers", "I'm alone"],
+  "2:emotion_or_state": ["Stressed", "Bored"],
+  "2:immediate_trigger": ["Seeing the bottle", "End of the workday"],
   "3:selected_strategy": ["delay_first_drink", "alternate_with_water"],
   "3:if_then_plan": [
     "If it's Friday after work, I'll walk ten minutes before opening a drink.",
     "If there's a dinner out, I'll drink a glass of water first.",
   ],
-  "3:obstacle": ["Too tired", "Hard to say no"],
+  "3:likely_obstacle": ["Too tired", "Hard to say no"],
   "3:workaround": ["Set a phone reminder", "Leave early"],
   "3:final_confidence_0_10": ["8", "5"],
   "3:if_then_plan_revised": [
@@ -49,10 +53,10 @@ const QUICK: Record<string, string[]> = {
     "If I want a drink, I'll pour water first and wait five minutes.",
   ],
   "3:final_confidence_0_10_after_shrink": ["8", "7"],
-  "4:top_reason": ["Sleep and health", "Family"],
-  "4:top_trigger": ["Friday stress", "Social events"],
-  "4:chosen_plan": ["If Friday, walk first then decide", "If dinner out, water first"],
-  "4:closing_confidence_0_10": ["8", "7"],
+  "4:summary_reason": ["Sleep and health", "Family"],
+  "4:summary_trigger": ["Friday stress", "Social events"],
+  "4:summary_plan": ["If Friday, walk first then decide", "If dinner out, water first"],
+  "4:summary_confidence": ["8", "7"],
   "4:optional_takeaway": ["none", "I'll try the smaller step"],
 };
 
@@ -77,18 +81,36 @@ export function ChatPage() {
   const [done, setDone] = useState(false);
   const [safetyBanner, setSafetyBanner] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const idleTimerRef = useRef<number | null>(null);
+  const editedSinceLastSendRef = useRef(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
+    emitUiEvent("refresh");
     const onVis = () => {
-      emitUiEvent(document.hidden ? "tab_hidden" : "tab_visible");
+      emitUiEvent(document.hidden ? "page_blur" : "page_return");
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
+
+  useEffect(() => {
+    if (busy) return;
+    if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = window.setTimeout(() => {
+      emitUiEvent("idle_timeout");
+      idleTimerRef.current = null;
+    }, 60_000);
+    return () => {
+      if (idleTimerRef.current) {
+        window.clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    };
+  }, [busy, input, messages.length]);
 
   useEffect(() => {
     const s = loadSession();
@@ -145,22 +167,24 @@ export function ChatPage() {
   }
 
   /** 乐观更新用户消息后请求 API，合并助手回复并处理关闭/跳转。 */
-  async function sendText(text: string) {
+  async function sendText(text: string, eventType: "send_message" | "skip_click" = "send_message") {
     const t = text.trim();
     if (!t) return;
     const s = loadSession();
     if (!s) return;
-    emitUiEvent(t === "(skip)" ? "skip_turn" : "user_send");
     setBusy(true);
     setErr(null);
     const userMsg: ChatMessage = { role: "user", text: t };
     const prev = messages;
     const next = [...prev, userMsg];
+    const userTurnIndex = next.filter((m) => m.role === "user").length;
+    emitUiEvent(eventType, undefined, userTurnIndex);
+    editedSinceLastSendRef.current = false;
     setMessages(next);
     persist(next);
     setInput("");
     try {
-      const res = await api.postChatTurn(s.sessionId, s.token, t);
+      const res = await api.postChatTurn(s.sessionId, s.token, t, new Date().toISOString());
       const asst: ChatMessage = { role: "assistant", text: res.assistant_text };
       const withBot = [...next, asst];
       setMessages(withBot);
@@ -245,7 +269,7 @@ export function ChatPage() {
                 className="chip"
                 disabled={busy}
                 onClick={() => {
-                  emitUiEvent("quick_reply_chip_click", q.length > 200 ? `${q.slice(0, 200)}…` : q);
+                  emitUiEvent("quick_reply_click", q.length > 200 ? `${q.slice(0, 200)}…` : q);
                   setInput(q);
                 }}
               >
@@ -258,21 +282,31 @@ export function ChatPage() {
         <div className="chat-input-row">
           <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              const nextInput = e.target.value;
+              setInput(nextInput);
+              if (!editedSinceLastSendRef.current && nextInput.trim().length > 0) {
+                emitUiEvent("edit_before_send");
+                editedSinceLastSendRef.current = true;
+              }
+            }}
+            onPaste={() => emitUiEvent("paste_detected")}
+            onFocus={() => emitUiEvent("focus_input")}
+            onBlur={() => emitUiEvent("page_blur")}
             placeholder="Type your reply…"
             rows={3}
             disabled={busy}
             maxLength={4000}
           />
           <div className="chat-actions">
-            <button type="button" className="btn" disabled={busy} onClick={() => sendText(input)}>
+            <button type="button" className="btn" disabled={busy} onClick={() => sendText(input, "send_message")}>
               Send
             </button>
             <button
               type="button"
               className="btn secondary"
               disabled={busy}
-              onClick={() => sendText("(skip)")}
+              onClick={() => sendText("(skip)", "skip_click")}
               title="Sends a placeholder reply; still counts as one user turn"
             >
               Skip this turn

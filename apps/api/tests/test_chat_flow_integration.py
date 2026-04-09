@@ -66,10 +66,9 @@ def _baseline_payload() -> dict:
     }
 
 
-# 25 轮：无 Stage3 缩小分支（末段信心 ≥7）；每轮数值槽须为可解析 0–10
-CHAT_TURNS_25: list[str] = [
+# 对齐 answer2.pdf 槽位：23 轮输入（Stage0=2, Stage1=5, Stage2=6, Stage3=5, Stage4=5）。
+CHAT_TURNS_23: list[str] = [
     "Alex",
-    "I understand the study is not treatment.",
     "Yes, ready to start.",
     "About three times last week, a few drinks each time.",
     "Last Friday I drank more than I wanted.",
@@ -77,12 +76,11 @@ CHAT_TURNS_25: list[str] = [
     "8",
     "7",
     "After-work social pressure.",
-    "Coworkers and clients.",
     "Restaurant or bar near work.",
     "Thursday and Friday evenings.",
+    "Coworkers and clients.",
     "Anxious and rushed.",
     "First round ordered for the table.",
-    "After-work drinks with colleagues.",
     "delay_first_drink",
     "If it's a work dinner, I'll order water for the first round.",
     "I feel too tired to resist.",
@@ -94,6 +92,17 @@ CHAT_TURNS_25: list[str] = [
     "8",
     "none",
 ]
+
+
+def _run_chat_until_closed(client: TestClient, sid: str, token: str, turns: list[str]) -> list[dict]:
+    """按 turns 逐轮发送，遇 chat_closed 即停，返回每轮响应。"""
+    out: list[dict] = []
+    for text in turns:
+        body = _post_chat_turn_ack_stage1(client, sid, token, text)
+        out.append(body)
+        if body.get("chat_closed"):
+            break
+    return out
 
 
 def _bootstrap_to_chat_ready(client: TestClient) -> tuple[str, str, str]:
@@ -136,11 +145,13 @@ def test_stage_progression_and_chat_close(client: TestClient) -> None:
     h = _auth_headers(token)
 
     chat_closed_flags: list[bool] = []
-    for i, text in enumerate(CHAT_TURNS_25):
+    for i, text in enumerate(CHAT_TURNS_23):
         body = _post_chat_turn_ack_stage1(client, sid, token, text)
         assert body["stub"] is True
         assert body.get("prompt_version") == "safechat-aud@0.2.1"
         chat_closed_flags.append(body["chat_closed"])
+        if body["chat_closed"]:
+            break
 
     assert chat_closed_flags[-1] is True
     assert all(not x for x in chat_closed_flags[:-1])
@@ -150,18 +161,17 @@ def test_stage_progression_and_chat_close(client: TestClient) -> None:
 
     st_end = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
     assert st_end.get("chat_summary") is not None
-    assert st_end["chat_summary"].get("schema_version") == "3"
+    assert st_end["chat_summary"].get("schema_version") == "4"
 
 
 def test_chat_summary_persistence_has_export_keys(client: TestClient) -> None:
     """摘要 JSON 含 v2 与兼容键。"""
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    for text in CHAT_TURNS_25:
-        _post_chat_turn_ack_stage1(client, sid, token, text)
+    _run_chat_until_closed(client, sid, token, CHAT_TURNS_23)
     summary = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()["chat_summary"]
     assert summary is not None
-    assert summary.get("schema_version") == "3"
+    assert summary.get("schema_version") == "4"
     for key in (
         "top_reason",
         "top_trigger",
@@ -186,7 +196,7 @@ def test_stage1_feedback_pending_blocks_chat_until_continue(client: TestClient) 
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
     saw_feedback = False
-    for text in CHAT_TURNS_25:
+    for text in CHAT_TURNS_23:
         r = client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": text}, headers=h)
         assert r.status_code == 200, r.text
         if r.json().get("stage1_feedback_required"):
@@ -208,28 +218,29 @@ def test_stage3_low_confidence_forces_shrink_slots(client: TestClient) -> None:
     # 将 Stage3 末信心改为 5，触发缩小分支；
     # 追加的 2 轮必须紧跟 Stage3（而不是放到 Stage4 之后）。
     turns = (
-        list(CHAT_TURNS_25[:19])
+        list(CHAT_TURNS_23[:17])
         + ["5"]
         + [
             "If stressed, I will wait five minutes before any drink.",
             "7",
         ]
-        + list(CHAT_TURNS_25[20:])
+        + list(CHAT_TURNS_23[18:])
     )
     n = len(turns)
-    assert n == 27
-    for text in turns:
-        _post_chat_turn_ack_stage1(client, sid, token, text)
+    assert n == 25
+    _run_chat_until_closed(client, sid, token, turns)
     st = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
     assert st["status"] == "post_survey_pending"
+    slots = st.get("slot_json") or {}
+    assert "3:if_then_plan_revised" in slots
+    assert "3:final_confidence_0_10_after_shrink" in slots
 
 
 def test_acceptance_e2e_linear_to_completed(client: TestClient) -> None:
     """验收：单会话线性完成至 completed（无 LLM，等同主力 API 路径）。"""
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    for text in CHAT_TURNS_25:
-        _post_chat_turn_ack_stage1(client, sid, token, text)
+    _run_chat_until_closed(client, sid, token, CHAT_TURNS_23)
     st = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
     assert st["status"] == "post_survey_pending"
     assert st.get("chat_summary") is not None
@@ -271,8 +282,7 @@ def test_post_survey_only_after_chat_completed(client: TestClient) -> None:
     )
     assert bad.status_code == 400
 
-    for text in CHAT_TURNS_25:
-        _post_chat_turn_ack_stage1(client, sid, token, text)
+    _run_chat_until_closed(client, sid, token, CHAT_TURNS_23)
 
     st = client.get(f"/api/v1/sessions/{sid}/state", headers=h)
     assert st.status_code == 200
@@ -298,7 +308,7 @@ def test_randomize_arm_idempotent(client: TestClient) -> None:
 def test_arm_fixed_during_chat(client: TestClient) -> None:
     sid, token, arm = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    for text in CHAT_TURNS_25[:3]:
+    for text in CHAT_TURNS_23[:3]:
         _post_chat_turn_ack_stage1(client, sid, token, text)
         st = client.get(f"/api/v1/sessions/{sid}/state", headers=h)
         assert st.json()["arm"] == arm
@@ -362,8 +372,7 @@ def test_followup_public_token_open_and_submit(client: TestClient) -> None:
     """验收：随访 opt-in → 公开 GET/POST token → 重复提交 409。"""
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    for text in CHAT_TURNS_25:
-        _post_chat_turn_ack_stage1(client, sid, token, text)
+    _run_chat_until_closed(client, sid, token, CHAT_TURNS_23)
     post_body = _sample_post_survey_json()
     post_body["open_most_helpful"] = "ok"
     post_body["open_unnatural_or_uncomfortable"] = "ok"

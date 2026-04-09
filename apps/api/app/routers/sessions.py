@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
@@ -29,6 +29,7 @@ from app.models.chat_turn import ChatTurn
 from app.models.llm_call import LlmCall
 from app.models.session import SessionRecord
 from app.models.session_followup import SessionFollowup
+from app.models.stage_state_event import StageStateEvent
 from app.models.survey_response import SurveyResponse
 from app.schemas.followup import FollowUpOptInBody, FollowUpOptInOkResponse
 from app.schemas.flow import (
@@ -50,13 +51,19 @@ from app.services.arm_styles import pick_random_arm
 from app.services.chat_summary import persist_chat_summary
 from app.services.strategy_library import strategies_payload_for_turn
 from app.services.chat_fsm import (
+    STAGE_3_SHRINK_SLOTS,
+    MAX_CHAT_STAGE,
     first_missing_slot,
     initial_current_substate,
     max_user_turns_for_stage,
     next_stage_after_completion,
+    parse_rating_0_10,
     pad_incomplete_stage_with_cap_marker,
     qualified_slot_key,
+    required_slots_for_stage,
+    slot_value_satisfied,
     stage_slots_complete,
+    total_required_slots_count,
 )
 from app.services.chat_llm_compose import build_turn_messages
 from app.services.chat_stub_content import build_assistant_slot_stub, load_strategies_placeholder
@@ -174,11 +181,11 @@ def _stage1_feedback_card_payload(db: OrmSession, row: SessionRecord) -> dict[st
         drinks = br.answers.get("typical_drinks_last_week")
     slots = dict(row.slot_json or {})
     keys = (
-        "1:recent_pattern",
+        "1:recent_drinking_pattern",
         "1:most_concerning_episode",
-        "1:reason_to_cut_down",
-        "1:importance_rating_0_10",
-        "1:confidence_rating_0_10",
+        "1:top_reason_to_cut_down",
+        "1:importance_0_10",
+        "1:confidence_0_10",
     )
     stage1 = {k.split(":", 1)[1]: slots.get(k) for k in keys}
     return {
@@ -195,6 +202,149 @@ def _assistant_turns_count(db: OrmSession, session_id: uuid.UUID) -> int:
     )
     n = db.scalar(q)
     return int(n or 0)
+
+
+def _text_word_count(text: str | None) -> int:
+    t = (text or "").strip()
+    if not t:
+        return 0
+    return len([w for w in t.split() if w])
+
+
+def _slot_completion_percent(slots: dict[str, Any]) -> int:
+    required = 0
+    filled = 0
+    for sg in range(0, MAX_CHAT_STAGE + 1):
+        for sk in required_slots_for_stage(sg):
+            required += 1
+            if slot_value_satisfied(sg, sk, slots.get(qualified_slot_key(sg, sk))):
+                filled += 1
+    # Stage 3 confidence < 7 时，追加两项 shrink 槽位到分母/分子。
+    conf = parse_rating_0_10(slots.get(qualified_slot_key(3, "final_confidence_0_10")))
+    if conf is not None and conf < 7:
+        for sk in STAGE_3_SHRINK_SLOTS:
+            required += 1
+            if slot_value_satisfied(3, sk, slots.get(qualified_slot_key(3, sk))):
+                filled += 1
+    if required <= 0:
+        return 0
+    return max(0, min(100, int(round((filled / required) * 100))))
+
+
+def _dropout_reason_for_state(row: SessionRecord) -> str | None:
+    if row.status == "abandoned":
+        return "safety" if row.safety_policy_chat_ended else "user_exit"
+    if row.status == "ineligible":
+        return "eligibility"
+    return None
+
+
+def _update_session_meta_metrics(db: OrmSession, row: SessionRecord) -> None:
+    q = select(ChatTurn.role, ChatTurn.text).where(ChatTurn.session_id == row.id)
+    turns = list(db.execute(q).all())
+    total_turns = len(turns)
+    total_user_words = 0
+    total_bot_words = 0
+    for role, text in turns:
+        wc = _text_word_count(text)
+        if role == "assistant":
+            total_bot_words += wc
+        elif role == "user":
+            total_user_words += wc
+
+    start_at = row.chat_started_at or row.created_at
+    end_at = row.chat_completed_at or (datetime.now(timezone.utc) if row.status in ("completed", "abandoned") else None)
+    total_duration_sec = int((end_at - start_at).total_seconds()) if (start_at and end_at) else None
+    slots = dict(row.slot_json or {})
+    row.session_meta_json = {
+        **dict(row.session_meta_json or {}),
+        "participant_id": str(row.id),
+        "assigned_condition": row.arm,
+        "started_at": start_at.isoformat() if start_at else None,
+        "ended_at": end_at.isoformat() if end_at else None,
+        "completed": row.status == "completed",
+        "dropout_stage": row.dropout_stage,
+        "dropout_reason": _dropout_reason_for_state(row),
+        "total_duration_sec": total_duration_sec,
+        "total_turns": total_turns,
+        "total_user_words": total_user_words,
+        "total_bot_words": total_bot_words,
+        "completion_percent": _slot_completion_percent(slots),
+        "required_slot_count_base": total_required_slots_count(),
+    }
+
+
+def _latest_llm_api_type(db: OrmSession, session_id: uuid.UUID) -> str | None:
+    q = (
+        select(LlmCall.api_type)
+        .where(LlmCall.session_id == session_id)
+        .order_by(LlmCall.created_at.desc())
+        .limit(1)
+    )
+    return db.scalar(q)
+
+
+def _force_fill_until_close(slots: dict[str, Any], start_stage: int) -> None:
+    """为 turn budget 强制收尾：从当前阶段起补齐所有剩余必填槽。"""
+    for sg in range(start_stage, MAX_CHAT_STAGE + 1):
+        pad_incomplete_stage_with_cap_marker(sg, slots)
+
+
+def _append_stage_state_event(
+    db: OrmSession,
+    row: SessionRecord,
+    *,
+    turn_index: int,
+    current_stage: int,
+    slots: dict[str, Any],
+    stage_complete: bool,
+    reason_for_transition: str | None,
+    selected_strategy_ids: list[str] | None = None,
+) -> None:
+    """记录阶段状态快照（每轮至少一条，便于论文过程分析）。"""
+    db.add(
+        StageStateEvent(
+            session_id=row.id,
+            turn_index=turn_index,
+            current_stage=current_stage,
+            slots_json=dict(slots),
+            stage_complete=stage_complete,
+            reason_for_transition=reason_for_transition,
+            importance_score=parse_rating_0_10(slots.get(qualified_slot_key(1, "importance_0_10"))),
+            confidence_score=parse_rating_0_10(slots.get(qualified_slot_key(3, "final_confidence_0_10"))),
+            selected_strategy_ids=list(selected_strategy_ids or []),
+            if_then_plan=str(slots.get(qualified_slot_key(3, "if_then_plan")) or "").strip() or None,
+            rolling_summary=(row.rolling_summary or "")[-4000:] or None,
+        )
+    )
+
+
+def _heuristic_style_fidelity(assistant_text: str, preferred_name: str | None = None) -> dict[str, Any]:
+    """规则型 style fidelity 标签（最小可用）：先启发式，后续可人工复核。"""
+    txt = (assistant_text or "").strip()
+    low = txt.lower()
+    num_questions = txt.count("?")
+    has_reflection = any(k in low for k in ("it sounds", "it seems", "you mentioned", "you said"))
+    has_affirmation = any(k in low for k in ("good job", "well done", "thanks for sharing", "that makes sense"))
+    has_emotion_label = any(k in low for k in ("stressed", "anxious", "frustrated", "sad", "bored", "relaxed"))
+    has_summary = any(k in low for k in ("to summarize", "in short", "you said", "summary"))
+    has_practical_suggestion = any(k in low for k in ("if", "then", "plan", "step", "try", "backup"))
+    has_autonomy_support = any(k in low for k in ("you can choose", "if you want", "when you're ready", "your choice"))
+    uses_name = bool(preferred_name and preferred_name.strip() and preferred_name.strip().lower() in low)
+    directiveness_score = min(5, max(1, 1 + int(any(k in low for k in ("should", "must", "need to", "do this")))))
+    warmth_score = min(5, max(1, 1 + int(has_reflection) + int(has_affirmation) + int(has_autonomy_support)))
+    return {
+        "num_questions": num_questions,
+        "has_reflection": has_reflection,
+        "has_affirmation": has_affirmation,
+        "has_emotion_label": has_emotion_label,
+        "has_summary": has_summary,
+        "has_practical_suggestion": has_practical_suggestion,
+        "has_autonomy_support": has_autonomy_support,
+        "uses_participant_name": uses_name,
+        "directiveness_score": directiveness_score,
+        "warmth_score": warmth_score,
+    }
 
 
 def _slot_snapshot_for_api(row: SessionRecord) -> tuple[str | None, dict[str, Any] | None, str | None]:
@@ -229,9 +379,10 @@ def _state_response(db: OrmSession, row: SessionRecord) -> SessionStateResponse:
     safety_show = sev >= 1 and row.status not in ("abandoned", "completed", "ineligible")
     safety_chat_ok = row.status in ("chat_ready", "chat_active")
     s1_card = _stage1_feedback_card_payload(db, row)
+    meta = dict(row.session_meta_json or {})
     turn_tgt_min = STUDY_TARGET_ASSISTANT_TURNS_MIN if row.arm else None
     turn_tgt_max = STUDY_TARGET_ASSISTANT_TURNS_MAX if row.arm else None
-    llm_lbl = LLM_API_TYPE_LABEL if row.arm else None
+    llm_lbl = (_latest_llm_api_type(db, row.id) or LLM_API_TYPE_LABEL) if row.arm else None
     asst_turns = (
         _assistant_turns_count(db, row.id)
         if row.arm and row.status in ("chat_ready", "chat_active", "stage1_feedback_pending")
@@ -269,6 +420,17 @@ def _state_response(db: OrmSession, row: SessionRecord) -> SessionStateResponse:
         study_target_assistant_turns_max=turn_tgt_max,
         llm_api_type_label=llm_lbl,
         assistant_turns_so_far=asst_turns,
+        model_id=(str(meta.get("model_id")) if meta.get("model_id") is not None else None),
+        api_type=(str(meta.get("api_type")) if meta.get("api_type") is not None else None),
+        store_flag=(bool(meta.get("store_flag")) if meta.get("store_flag") is not None else None),
+        global_prompt_version=(str(meta.get("global_prompt_version")) if meta.get("global_prompt_version") is not None else None),
+        style_prompt_version=(str(meta.get("style_prompt_version")) if meta.get("style_prompt_version") is not None else None),
+        stage_prompt_version=(str(meta.get("stage_prompt_version")) if meta.get("stage_prompt_version") is not None else None),
+        strategy_library_version=(
+            str(meta.get("strategy_library_version")) if meta.get("strategy_library_version") is not None else None
+        ),
+        frontend_build=(str(meta.get("frontend_build")) if meta.get("frontend_build") is not None else None),
+        backend_build=(str(meta.get("backend_build")) if meta.get("backend_build") is not None else None),
     )
 
 
@@ -279,10 +441,21 @@ class SessionCreatedResponse(BaseModel):
     session_token: str
 
 
+class SessionCreateBody(BaseModel):
+    """创建会话时可选的参与者/环境元数据。"""
+
+    recruitment_source: str | None = Field(default=None, max_length=64)
+    language: str | None = Field(default=None, max_length=32)
+    timezone: str | None = Field(default=None, max_length=64)
+    device_type: str | None = Field(default=None, max_length=32)
+    browser: str | None = Field(default=None, max_length=64)
+
+
 class ChatTurnBody(BaseModel):
     """单轮聊天请求体：用户输入文本。"""
 
     text: str = Field(min_length=1, max_length=8000)
+    timestamp_client_send: datetime | None = None
 
 
 class UiEventBody(BaseModel):
@@ -295,6 +468,32 @@ class UiEventBody(BaseModel):
 
 class UiEventOkResponse(BaseModel):
     ok: Literal[True] = True
+
+
+def _detect_device_type(user_agent: str) -> str | None:
+    ua = (user_agent or "").lower()
+    if not ua:
+        return None
+    if any(k in ua for k in ("iphone", "android", "mobile")):
+        return "mobile"
+    if any(k in ua for k in ("ipad", "tablet")):
+        return "tablet"
+    return "desktop"
+
+
+def _detect_browser(user_agent: str) -> str | None:
+    ua = (user_agent or "").lower()
+    if not ua:
+        return None
+    if "edg/" in ua:
+        return "edge"
+    if "chrome/" in ua and "edg/" not in ua:
+        return "chrome"
+    if "firefox/" in ua:
+        return "firefox"
+    if "safari/" in ua and "chrome/" not in ua:
+        return "safari"
+    return "other"
 
 
 def _recent_turns_transcript(db: OrmSession, session_id: uuid.UUID, limit: int = 14) -> str:
@@ -314,9 +513,16 @@ def _recent_turns_transcript(db: OrmSession, session_id: uuid.UUID, limit: int =
 
 
 @router.post("", response_model=SessionCreatedResponse, status_code=status.HTTP_201_CREATED)
-def create_session(db: OrmSession = Depends(get_db)) -> SessionCreatedResponse:
+def create_session(
+    request: Request,
+    body: SessionCreateBody | None = None,
+    db: OrmSession = Depends(get_db),
+) -> SessionCreatedResponse:
     """创建新会话并返回 id 与 session_token（后续 Bearer）。"""
     token = secrets.token_urlsafe(32)
+    ua = request.headers.get("user-agent", "") if request else ""
+    timezone_header = request.headers.get("x-timezone") if request else None
+    b = body or SessionCreateBody()
     row = SessionRecord(
         session_token=token,
         status="consent_pending",
@@ -324,9 +530,22 @@ def create_session(db: OrmSession = Depends(get_db)) -> SessionCreatedResponse:
         slot_json={},
         rolling_summary="",
         current_substate=None,
+        session_meta_json={
+            "participant_id": None,  # flush 后回填
+            "recruitment_source": b.recruitment_source,
+            "language": b.language,
+            "timezone": b.timezone or timezone_header,
+            "device_type": b.device_type or _detect_device_type(ua),
+            "browser": b.browser or _detect_browser(ua),
+            "randomization_block": settings.randomization_mode,
+        },
     )
     db.add(row)
     db.flush()
+    row.session_meta_json = {
+        **dict(row.session_meta_json or {}),
+        "participant_id": str(row.id),
+    }
     _record_audit(db, row.id, "session_created", {"session_id": str(row.id)})
     db.commit()
     db.refresh(row)
@@ -625,6 +844,21 @@ def post_randomize(
     _reset_chat_counters(row)
     bundle = load_bundle(None)
     row.prompt_bundle_version = bundle.version_ref
+    row.session_meta_json = {
+        **dict(row.session_meta_json or {}),
+        "participant_id": str(row.id),
+        "assigned_condition": arm,
+        "randomization_block": settings.randomization_mode,
+        "model_id": effective_llm_model(),
+        "api_type": LLM_API_TYPE_LABEL,
+        "store_flag": bool(settings.llm_store_flag),
+        "global_prompt_version": bundle.version_ref,
+        "style_prompt_version": bundle.version_ref,
+        "stage_prompt_version": bundle.version_ref,
+        "strategy_library_version": load_strategies_placeholder().get("version"),
+        "frontend_build": settings.frontend_build,
+        "backend_build": settings.backend_build,
+    }
     _touch_activity(row)
     _record_audit(
         db,
@@ -635,6 +869,8 @@ def post_randomize(
             "prompt_version": bundle.version_ref,
             "randomization_mode": settings.randomization_mode,
             "strategy_library_version": load_strategies_placeholder().get("version"),
+            "frontend_build": settings.frontend_build,
+            "backend_build": settings.backend_build,
         },
     )
     db.commit()
@@ -735,8 +971,11 @@ def post_chat_turn(
                 stage=st_em,
                 arm=row.arm,
                 text=body.text,
+                char_count=len(body.text),
+                word_count=_text_word_count(body.text),
                 user_text=body.text,
                 assistant_text=None,
+                timestamp_client_send=body.timestamp_client_send,
                 latency_ms=None,
                 server_received_at=t_recv,
                 response_ready_at=None,
@@ -752,8 +991,11 @@ def post_chat_turn(
                 stage=st_em,
                 arm=row.arm,
                 text=assistant_text,
+                char_count=len(assistant_text),
+                word_count=_text_word_count(assistant_text),
                 user_text=body.text,
                 assistant_text=assistant_text,
+                timestamp_client_send=None,
                 latency_ms=latency_ms,
                 server_received_at=t_recv,
                 response_ready_at=t_done,
@@ -770,6 +1012,7 @@ def post_chat_turn(
             {"severity": scan.severity, "codes": scan.matched_codes, "exchange_index": exchange_index},
         )
         persist_chat_summary(db, row)
+        _update_session_meta_metrics(db, row)
         _touch_activity(row)
         db.commit()
         return ChatTurnResponse(
@@ -817,6 +1060,24 @@ def post_chat_turn(
                 },
             )
 
+    assistant_turns_before = _assistant_turns_count(db, row.id)
+    budget_hard_limit = STUDY_TARGET_ASSISTANT_TURNS_MAX
+    budget_force_close = assistant_turns_before >= (budget_hard_limit - 1)
+    if budget_force_close:
+        _force_fill_until_close(slots, st)
+        row.slot_json = slots
+        _record_audit(
+            db,
+            row.id,
+            "turn_budget_exceeded",
+            {
+                "assistant_turns_before": assistant_turns_before,
+                "assistant_turn_limit": budget_hard_limit,
+                "exchange_index": exchange_index,
+                "forced_from_stage": st,
+            },
+        )
+
     stage_complete = stage_slots_complete(st, slots)
     chat_closed = False
     assistant_stub = ""
@@ -829,7 +1090,18 @@ def post_chat_turn(
     first_next: str | None = None
     mode = "next_slot"
 
-    if not stage_complete:
+    if budget_force_close:
+        assistant_stub = build_assistant_slot_stub(
+            row.arm,
+            MAX_CHAT_STAGE,
+            completing_chat=True,
+            next_stage=None,
+            ask_slot=None,
+            bundle=bundle,
+        )
+        mode = "closing"
+        chat_closed = True
+    elif not stage_complete:
         next_ask = first_missing_slot(st, slots)
         if next_ask is None:
             raise HTTPException(status_code=500, detail="Internal slot bookkeeping mismatch.")
@@ -932,6 +1204,7 @@ def post_chat_turn(
     elif not stage_complete:
         row.current_substate = qualified_slot_key(st, next_ask)  # type: ignore[arg-type]
     elif chat_closed:
+        row.fsm_stage = MAX_CHAT_STAGE
         row.status = "post_survey_pending"
         row.chat_completed_at = datetime.now(timezone.utc)
         row.current_substate = None
@@ -978,6 +1251,14 @@ def post_chat_turn(
     if llm_attempted:
         stub_meta["llm_attempted"] = True
         if llm_res:
+            row.session_meta_json = {
+                **dict(row.session_meta_json or {}),
+                "model_id": llm_res.model_version or effective_llm_model(),
+                "api_type": llm_res.api_type,
+                "store_flag": bool(settings.llm_store_flag),
+                "frontend_build": settings.frontend_build,
+                "backend_build": settings.backend_build,
+            }
             stub_meta["llm_model"] = llm_res.model_version
             stub_meta["llm_response_id"] = llm_res.response_id
             stub_meta["llm_latency_ms"] = llm_res.latency_ms
@@ -995,11 +1276,32 @@ def post_chat_turn(
                 stub_meta["next_action"] = p.next_action
                 stub_meta["model_reported_stage"] = p.model_reported_stage
                 stub_meta["llm_risk_block"] = p.risk.model_dump()
-                stub_meta["llm_api_type"] = LLM_API_TYPE_LABEL
+                stub_meta["llm_api_type"] = llm_res.api_type
+                stub_meta["llm_retry_count"] = llm_res.retry_count
+                stub_meta["llm_refusal_flag"] = llm_res.refusal_flag
+                if llm_res.finish_reason:
+                    stub_meta["llm_finish_reason"] = llm_res.finish_reason
+                if llm_res.fallback_reason:
+                    stub_meta["llm_fallback_reason"] = llm_res.fallback_reason
             elif llm_res.error:
                 stub_meta["llm_error"] = llm_res.error
     else:
         stub_meta["llm_skipped"] = True
+    preferred_name_for_tag = str(slots.get(qualified_slot_key(0, "preferred_name")) or "").strip() or None
+    stub_meta["style_fidelity"] = _heuristic_style_fidelity(assistant_text, preferred_name_for_tag)
+    _record_audit(
+        db,
+        row.id,
+        "style_fidelity_tagged",
+        {
+            "exchange_index": exchange_index,
+            "stage": st,
+            "tags": stub_meta["style_fidelity"],
+        },
+    )
+    selected_strategy_ids_for_state: list[str] = []
+    if llm_res and llm_res.ok and llm_res.parsed:
+        selected_strategy_ids_for_state = list(llm_res.parsed.selected_strategy_ids or [])
 
     if llm_attempted:
         db.add(
@@ -1008,13 +1310,19 @@ def post_chat_turn(
                 exchange_index=exchange_index,
                 prompt_version=bundle.version_ref,
                 model_version=(llm_res.model_version if llm_res else effective_llm_model()) or "",
+                api_type=(llm_res.api_type if llm_res else LLM_API_TYPE_LABEL),
                 response_id=llm_res.response_id if llm_res and llm_res.ok else None,
+                previous_response_id=llm_res.previous_response_id if llm_res and llm_res.ok else None,
                 latency_ms=llm_res.latency_ms if llm_res else 0,
                 prompt_tokens=llm_res.input_tokens if llm_res else None,
                 completion_tokens=llm_res.output_tokens if llm_res else None,
                 total_tokens=llm_res.total_tokens if llm_res else None,
                 success=bool(llm_res and llm_res.ok),
                 fallback_used=stub_flag,
+                fallback_reason=(llm_res.fallback_reason if llm_res else None),
+                retry_count=(llm_res.retry_count if llm_res else 0),
+                finish_reason=(llm_res.finish_reason if llm_res else None),
+                refusal_flag=(llm_res.refusal_flag if llm_res else False),
                 error_message=None
                 if (llm_res and llm_res.ok)
                 else (llm_res.error if llm_res else "llm_no_response"),
@@ -1034,8 +1342,11 @@ def post_chat_turn(
             stage=st,
             arm=row.arm,
             text=body.text,
+            char_count=len(body.text),
+            word_count=_text_word_count(body.text),
             user_text=body.text,
             assistant_text=None,
+            timestamp_client_send=body.timestamp_client_send,
             latency_ms=None,
             server_received_at=t_recv,
             response_ready_at=None,
@@ -1051,8 +1362,11 @@ def post_chat_turn(
             stage=st,
             arm=row.arm,
             text=assistant_text,
+            char_count=len(assistant_text),
+            word_count=_text_word_count(assistant_text),
             user_text=body.text,
             assistant_text=assistant_text,
+            timestamp_client_send=None,
             latency_ms=latency_ms,
             server_received_at=t_recv,
             response_ready_at=t_done,
@@ -1060,9 +1374,24 @@ def post_chat_turn(
         )
     )
 
+    _append_stage_state_event(
+        db,
+        row,
+        turn_index=turn_asst,
+        current_stage=row.fsm_stage,
+        slots=slots,
+        stage_complete=stage_complete,
+        reason_for_transition=(
+            "turn_budget_force_close"
+            if budget_force_close
+            else ("stage_complete" if stage_complete else "slot_update")
+        ),
+        selected_strategy_ids=selected_strategy_ids_for_state,
+    )
+
     if row.status == "post_survey_pending":
         persist_chat_summary(db, row)
-
+    _update_session_meta_metrics(db, row)
     _touch_activity(row)
     db.commit()
 
@@ -1136,8 +1465,11 @@ def post_stage1_feedback_continue(
             stage=2,
             arm=row.arm,
             text=synthetic,
+            char_count=len(synthetic),
+            word_count=_text_word_count(synthetic),
             user_text=synthetic,
             assistant_text=None,
+            timestamp_client_send=None,
             latency_ms=None,
             server_received_at=t_recv,
             response_ready_at=None,
@@ -1155,13 +1487,26 @@ def post_stage1_feedback_continue(
             stage=2,
             arm=row.arm,
             text=assistant_text,
+            char_count=len(assistant_text),
+            word_count=_text_word_count(assistant_text),
             user_text=synthetic,
             assistant_text=assistant_text,
+            timestamp_client_send=None,
             latency_ms=latency_ms,
             server_received_at=t_recv,
             response_ready_at=t_done,
             stub_meta=stub_meta,
         )
+    )
+    _append_stage_state_event(
+        db,
+        row,
+        turn_index=turn_asst,
+        current_stage=2,
+        slots=slots,
+        stage_complete=False,
+        reason_for_transition="stage1_feedback_continue",
+        selected_strategy_ids=[],
     )
     _record_audit(db, row.id, "stage1_feedback_continued", {"exchange_index": ex})
     _touch_activity(row)
@@ -1199,6 +1544,7 @@ def post_post_survey(
         )
     )
     row.status = "completed"
+    _update_session_meta_metrics(db, row)
     _touch_activity(row)
     _record_audit(db, row.id, "post_survey_submitted", {"schema_version": SURVEY_SCHEMA_POST})
     db.commit()

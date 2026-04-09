@@ -22,6 +22,22 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 }
 
+function detectDeviceTypeFromUA(userAgent: string): "mobile" | "tablet" | "desktop" {
+  const ua = userAgent.toLowerCase();
+  if (ua.includes("iphone") || ua.includes("android") || ua.includes("mobile")) return "mobile";
+  if (ua.includes("ipad") || ua.includes("tablet")) return "tablet";
+  return "desktop";
+}
+
+function detectBrowserFromUA(userAgent: string): string {
+  const ua = userAgent.toLowerCase();
+  if (ua.includes("edg/")) return "edge";
+  if (ua.includes("chrome/") && !ua.includes("edg/")) return "chrome";
+  if (ua.includes("firefox/")) return "firefox";
+  if (ua.includes("safari/") && !ua.includes("chrome/")) return "safari";
+  return "other";
+}
+
 /** GET 同意书 Markdown 与版本号（无需登录）。 */
 export async function getConsentDocument(): Promise<{
   consent_document_version: string;
@@ -36,7 +52,21 @@ export async function getConsentDocument(): Promise<{
 
 /** POST 创建新会话，返回 session_id 与 session_token。 */
 export async function createSession(): Promise<{ session_id: string; session_token: string }> {
-  const r = await fetch(`${B}/sessions`, { method: "POST" });
+  const userAgent = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+  const language = typeof navigator !== "undefined" ? navigator.language || undefined : undefined;
+  const timezone =
+    typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone || undefined : undefined;
+  const body = {
+    language,
+    timezone,
+    device_type: detectDeviceTypeFromUA(userAgent),
+    browser: detectBrowserFromUA(userAgent),
+  };
+  const r = await fetch(`${B}/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
@@ -99,11 +129,11 @@ export async function postRandomize(sessionId: string, token: string) {
 }
 
 /** POST 发送一轮聊天用户文本，返回助手回复与是否关闭聊天等。 */
-export async function postChatTurn(sessionId: string, token: string, text: string) {
+export async function postChatTurn(sessionId: string, token: string, text: string, timestampClientSend?: string) {
   const r = await fetch(`${B}/sessions/${sessionId}/chat/turn`, {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, timestamp_client_send: timestampClientSend }),
   });
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new HttpError(typeof body === "string" ? body : JSON.stringify(body), r.status, body);

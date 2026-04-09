@@ -199,10 +199,19 @@ class SessionStateResponse(BaseModel):
         ge=0,
         description="Count of assistant chat_turn rows so far (vs study_target_assistant_turns_*).",
     )
+    model_id: str | None = None
+    api_type: str | None = None
+    store_flag: bool | None = None
+    global_prompt_version: str | None = None
+    style_prompt_version: str | None = None
+    stage_prompt_version: str | None = None
+    strategy_library_version: str | None = None
+    frontend_build: str | None = None
+    backend_build: str | None = None
 
 
 class PostSurveySubmit(BaseModel):
-    """后测问卷（schema v3）：WAI-TECH-SF 12 项（1–7）、过程量表、操纵检验与两道开放题。"""
+    """后测问卷（schema v4）：WAI-TECH-SF 12 项（1–7）、过程量表、操纵检验与两道开放题。"""
 
     wai_tech_sf_item_01: int = Field(ge=1, le=7, description="WAI-TECH-SF item 1")
     wai_tech_sf_item_02: int = Field(ge=1, le=7)

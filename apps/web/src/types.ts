@@ -37,6 +37,15 @@ export interface SessionState {
   study_target_assistant_turns_max?: number | null;
   llm_api_type_label?: string | null;
   assistant_turns_so_far?: number | null;
+  model_id?: string | null;
+  api_type?: string | null;
+  store_flag?: boolean | null;
+  global_prompt_version?: string | null;
+  style_prompt_version?: string | null;
+  stage_prompt_version?: string | null;
+  strategy_library_version?: string | null;
+  frontend_build?: string | null;
+  backend_build?: string | null;
 }
 
 /** 浏览器中展示的一条聊天消息。 */

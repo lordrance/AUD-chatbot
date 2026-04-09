@@ -25,7 +25,9 @@ class LlmCall(Base):
 
     prompt_version: Mapped[str | None] = mapped_column(String(128), nullable=True)
     model_version: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    api_type: Mapped[str] = mapped_column(String(64), nullable=False, default="chat_completions")
     response_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    previous_response_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -34,6 +36,10 @@ class LlmCall(Base):
 
     success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     fallback_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    fallback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    finish_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    refusal_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     normalized_output: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

@@ -76,6 +76,26 @@ pytest tests/test_chat_flow_integration.py tests/test_safety_routes_integration.
 
 Details: `docs/acceptance-checklist.md`.
 
+## Jenkins CI
+
+项目已内置 `Jenkinsfile`，可在 Jenkins 上一键跑后端单测 + DB 验收 + 前端构建。说明见 `docs/jenkins-ci.md`。
+
+## End-to-end smoke test
+
+当 API 已启动且数据库已迁移后，可运行一次端到端烟测（随机化→聊天→摘要→后测）：
+
+```powershell
+cd E:\ADU
+python .\scripts\e2e-smoke.py
+```
+
+可选：用环境变量覆盖 API 地址（默认 `http://127.0.0.1:8000`）：
+
+```powershell
+$env:E2E_API_BASE = "http://127.0.0.1:8000"
+python .\scripts\e2e-smoke.py
+```
+
 ---
 
 ## Participant flow (v1)
@@ -94,7 +114,7 @@ Details: `docs/acceptance-checklist.md`.
 
 ## LLM (optional)
 
-If `OPENAI_API_KEY` (or Gemini via `LLM_PROVIDER` / `GEMINI_API_KEY`) is set, the API calls a structured JSON chat completion; failures fall back to stub. See `apps/api/app/config.py` and root README’s previous “LLM” section for env vars.
+If `OPENAI_API_KEY` (or Gemini via `LLM_PROVIDER` / `GEMINI_API_KEY`) is set, the API uses **Responses API** as primary structured-output channel and falls back to Chat Completions when needed; failures then fall back to stub text. Runtime channel is audited in `llm_calls.api_type`.
 
 ---
 
