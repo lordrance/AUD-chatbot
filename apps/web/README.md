@@ -10,7 +10,7 @@
 4. **`/baseline`** 基线（`POST .../surveys/baseline`）  
 5. **`/randomize`** 随机分组（`POST .../randomize`）  
 6. **`/chat`** 聊天（`POST .../chat/turn`）；消息列表缓存在浏览器 `localStorage`；可选快捷短语、跳过、帮助  
-7. **`/post-survey`** 后测（`POST .../surveys/post`，schema v2）  
+7. **`/post-survey`** 后测（`POST .../surveys/post`，schema v4）  
 8. **`/thank-you`** 致谢与 debrief；**`/ineligible`** 不符合条件时的说明与资源  
 
 前端**从不**直接调用大模型；阶段与分组以后端为准。

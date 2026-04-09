@@ -60,6 +60,9 @@ class Settings(BaseSettings):
         default="three_arm",
         validation_alias=AliasChoices("SAFECHAT_RANDOMIZATION_MODE", "randomization_mode"),
     )
+    backend_build: str = Field(default="dev")
+    frontend_build: str = Field(default="unknown")
+    llm_store_flag: bool = Field(default=True)
 
 
 settings = Settings()

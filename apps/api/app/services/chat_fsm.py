@@ -4,37 +4,36 @@ from __future__ import annotations
 
 from typing import Any
 
-# Stage 0–4：每阶段必收槽位（顺序即收集顺序）；与 prompts/stage_*.yaml 对齐。
+# Stage 0–4：每阶段必收槽位（顺序即收集顺序）；严格对齐 answer2.pdf 命名。
 REQUIRED_SLOTS_BY_STAGE: dict[int, tuple[str, ...]] = {
-    0: ("preferred_name", "orientation_ack", "ready_to_start"),
+    0: ("preferred_name", "ready_to_start"),
     1: (
-        "recent_pattern",
+        "recent_drinking_pattern",
         "most_concerning_episode",
-        "reason_to_cut_down",
-        "importance_rating_0_10",
-        "confidence_rating_0_10",
+        "top_reason_to_cut_down",
+        "importance_0_10",
+        "confidence_0_10",
     ),
     2: (
-        "target_high_risk_situation",
-        "people",
-        "place",
-        "time",
-        "emotion_or_internal_state",
-        "cue_or_trigger",
+        "target_situation",
+        "where",
+        "when",
+        "who_with",
+        "emotion_or_state",
+        "immediate_trigger",
     ),
     3: (
-        "selected_target_situation",
         "selected_strategy",
         "if_then_plan",
-        "obstacle",
+        "likely_obstacle",
         "workaround",
         "final_confidence_0_10",
     ),
     4: (
-        "top_reason",
-        "top_trigger",
-        "chosen_plan",
-        "closing_confidence_0_10",
+        "summary_reason",
+        "summary_trigger",
+        "summary_plan",
+        "summary_confidence",
         "optional_takeaway",
     ),
 }
@@ -65,11 +64,11 @@ def max_user_turns_for_stage(stage: int) -> int:
 # 必须为可解析的 0–10 整数的槽位（键为 (stage, slot_id)）。
 NUMERIC_0_10_SLOTS: frozenset[tuple[int, str]] = frozenset(
     {
-        (1, "importance_rating_0_10"),
-        (1, "confidence_rating_0_10"),
+        (1, "importance_0_10"),
+        (1, "confidence_0_10"),
         (3, "final_confidence_0_10"),
         (3, "final_confidence_0_10_after_shrink"),
-        (4, "closing_confidence_0_10"),
+        (4, "summary_confidence"),
     }
 )
 

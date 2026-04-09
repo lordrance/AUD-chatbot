@@ -31,17 +31,17 @@ def test_llm_success_parses_structured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app_config.settings, "openai_base_url", None)
 
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = MagicMock(
-        choices=[MagicMock(message=MagicMock(content=_valid_payload()))],
+    mock_client.responses.create.return_value = MagicMock(
+        output_text=_valid_payload(),
         model="gpt-4o-mini",
         id="resp-test-1",
-        usage=MagicMock(prompt_tokens=10, completion_tokens=20, total_tokens=30),
+        usage=MagicMock(input_tokens=10, output_tokens=20, total_tokens=30),
     )
 
     with patch("app.services.llm_client._client", return_value=mock_client):
         r = call_chat_turn_structured([{"role": "user", "content": "hi"}])
 
-    kw = mock_client.chat.completions.create.call_args.kwargs
+    kw = mock_client.responses.create.call_args.kwargs
     assert kw["response_format"]["type"] == "json_schema"
     assert r.ok
     assert r.parsed is not None
@@ -58,11 +58,11 @@ def test_llm_invalid_json_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app_config.settings, "openai_api_key", "sk-test-key")
 
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = MagicMock(
-        choices=[MagicMock(message=MagicMock(content="not json"))],
+    mock_client.responses.create.return_value = MagicMock(
+        output_text="not json",
         model="gpt-4o-mini",
         id="resp-bad",
-        usage=MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+        usage=MagicMock(input_tokens=1, output_tokens=1, total_tokens=2),
     )
 
     with patch("app.services.llm_client._client", return_value=mock_client):
@@ -104,6 +104,27 @@ def test_gemini_compat_base_url_uses_json_object(monkeypatch: pytest.MonkeyPatch
     assert r.ok
     kw = mock_client.chat.completions.create.call_args.kwargs
     assert kw["response_format"] == {"type": "json_object"}
+    assert r.api_type == "chat_completions_fallback"
+
+
+def test_responses_fallback_to_chat_completions(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_config.settings, "llm_provider", "openai")
+    monkeypatch.setattr(app_config.settings, "openai_api_key", "sk-test-key")
+    monkeypatch.setattr(app_config.settings, "openai_base_url", None)
+
+    mock_client = MagicMock()
+    mock_client.responses.create.side_effect = RuntimeError("responses path unavailable")
+    mock_client.chat.completions.create.return_value = MagicMock(
+        choices=[MagicMock(message=MagicMock(content=_valid_payload()))],
+        model="gpt-4o-mini",
+        id="cmp-fallback-1",
+        usage=MagicMock(prompt_tokens=2, completion_tokens=3, total_tokens=5),
+    )
+    with patch("app.services.llm_client._client", return_value=mock_client):
+        r = call_chat_turn_structured([{"role": "user", "content": "hi"}])
+    assert r.ok
+    assert r.api_type == "chat_completions_fallback"
+    assert r.fallback_reason is not None
 
 
 def test_llm_disabled_gemini_without_key(monkeypatch: pytest.MonkeyPatch) -> None:

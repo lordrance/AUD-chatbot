@@ -139,6 +139,12 @@ function initialWai(): Record<string, number> {
 
 const init5 = () => 3;
 
+function emitSurveyUiEvent(event_type: string, event_value?: string | null) {
+  const s = loadSession();
+  if (!s) return;
+  void api.postUiEvent(s.sessionId, s.token, { event_type, event_value: event_value ?? undefined }).catch(() => {});
+}
+
 /** 后测表单与校验提交。 */
 export function PostSurveyPage() {
   const navigate = useNavigate();
@@ -177,6 +183,7 @@ export function PostSurveyPage() {
         navigate("/chat-summary");
       }
     });
+    emitSurveyUiEvent("survey_start", "post");
   }, [navigate]);
 
   /** 校验开放题非空后 POST post-survey。 */
@@ -190,6 +197,7 @@ export function PostSurveyPage() {
     setBusy(true);
     setErr(null);
     try {
+      emitSurveyUiEvent("survey_submit", "post");
       await api.postPostSurvey(s.sessionId, s.token, {
         ...wai,
         trust_1_5: trust,

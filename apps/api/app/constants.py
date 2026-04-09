@@ -17,5 +17,5 @@ DEFAULT_PROMPT_BUNDLE_VERSION = "0.2.1"
 STUDY_TARGET_ASSISTANT_TURNS_MIN = 12
 STUDY_TARGET_ASSISTANT_TURNS_MAX = 16
 
-# 当前 LLM 接入在论文/审计中的标签（实现为 OpenAI Chat Completions + json_schema / json_object）
-LLM_API_TYPE_LABEL = "chat_completions"
+# 默认 LLM 通道标签（真实值以每次调用写入 llm_calls.api_type 为准）
+LLM_API_TYPE_LABEL = "responses_primary"

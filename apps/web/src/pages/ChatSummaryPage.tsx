@@ -69,15 +69,15 @@ export function ChatSummaryPage() {
         {summary != null && Object.keys(summary).length > 0 && (
           <div className="summary-card">
             {line("Preferred name", summary.preferred_name as string | undefined)}
-            {line("Main reason to cut down", (summary.top_reason ?? summary.top_reason_to_cut_down) as string | undefined)}
+            {line("Main reason to cut down", (summary.summary_reason ?? summary.top_reason_to_cut_down) as string | undefined)}
             {line(
               "Main trigger / high-risk situation",
-              (summary.top_trigger ?? summary.top_trigger_high_risk_situation) as string | undefined,
+              (summary.summary_trigger ?? summary.top_trigger_high_risk_situation) as string | undefined,
             )}
             {line("Situation details (who/where/when/cues)", summary.trigger_context as string | undefined)}
             {line("Strategy focus", (summary.selected_strategy ?? summary.support_focus) as string | undefined)}
-            {line("Chosen plan (if–then)", (summary.chosen_plan ?? summary.micro_plan_if_then) as string | undefined)}
-            {line("Closing confidence (0–10)", summary.closing_confidence_0_10 as number | undefined)}
+            {line("Chosen plan (if–then)", (summary.summary_plan ?? summary.micro_plan_if_then) as string | undefined)}
+            {line("Closing confidence (0–10)", summary.summary_confidence as number | undefined)}
             {line("Confidence / readiness notes", summary.confidence_summary as string | undefined)}
             {line("Optional closing note", summary.optional_takeaway as string | undefined)}
           </div>

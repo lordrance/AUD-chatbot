@@ -79,7 +79,7 @@ export function Stage1FeedbackPage() {
               <>
                 <div className="summary-row">
                   <span className="summary-label">Recent drinking pattern</span>
-                  <span className="summary-value">{String(slots.recent_pattern ?? "—")}</span>
+                  <span className="summary-value">{String(slots.recent_drinking_pattern ?? "—")}</span>
                 </div>
                 <div className="summary-row">
                   <span className="summary-label">Most concerning episode</span>
@@ -87,15 +87,15 @@ export function Stage1FeedbackPage() {
                 </div>
                 <div className="summary-row">
                   <span className="summary-label">Reason to cut down</span>
-                  <span className="summary-value">{String(slots.reason_to_cut_down ?? "—")}</span>
+                  <span className="summary-value">{String(slots.top_reason_to_cut_down ?? "—")}</span>
                 </div>
                 <div className="summary-row">
                   <span className="summary-label">Importance (0–10)</span>
-                  <span className="summary-value">{String(slots.importance_rating_0_10 ?? "—")}</span>
+                  <span className="summary-value">{String(slots.importance_0_10 ?? "—")}</span>
                 </div>
                 <div className="summary-row">
                   <span className="summary-label">Confidence (0–10)</span>
-                  <span className="summary-value">{String(slots.confidence_rating_0_10 ?? "—")}</span>
+                  <span className="summary-value">{String(slots.confidence_0_10 ?? "—")}</span>
                 </div>
               </>
             )}

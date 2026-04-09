@@ -15,16 +15,14 @@ from app.services.chat_fsm import (
 
 
 def test_total_slots_base_count():
-    # 3+5+6+6+5 = 25 (Stage 3 shrink slots are conditional, not in static sum)
-    assert total_required_slots_count() == 25
+    # 2+5+6+5+5 = 23 (Stage 3 shrink slots are conditional, not in static sum)
+    assert total_required_slots_count() == 23
 
 
 def test_first_missing_stage0_through_stage1_start():
     slots: dict = {}
     assert first_missing_slot(0, slots) == "preferred_name"
     slots[qualified_slot_key(0, "preferred_name")] = "Alex"
-    assert first_missing_slot(0, slots) == "orientation_ack"
-    slots[qualified_slot_key(0, "orientation_ack")] = "ok"
     assert first_missing_slot(0, slots) == "ready_to_start"
     assert not stage_slots_complete(0, slots)
     slots[qualified_slot_key(0, "ready_to_start")] = "yes"
@@ -33,15 +31,15 @@ def test_first_missing_stage0_through_stage1_start():
 
 def test_numeric_slot_must_be_valid_0_10():
     slots = {
-        qualified_slot_key(1, "recent_pattern"): "x",
+        qualified_slot_key(1, "recent_drinking_pattern"): "x",
         qualified_slot_key(1, "most_concerning_episode"): "y",
-        qualified_slot_key(1, "reason_to_cut_down"): "z",
+        qualified_slot_key(1, "top_reason_to_cut_down"): "z",
     }
-    assert first_missing_slot(1, slots) == "importance_rating_0_10"
-    slots[qualified_slot_key(1, "importance_rating_0_10")] = "not-a-number"
-    assert first_missing_slot(1, slots) == "importance_rating_0_10"
-    slots[qualified_slot_key(1, "importance_rating_0_10")] = "8"
-    assert first_missing_slot(1, slots) == "confidence_rating_0_10"
+    assert first_missing_slot(1, slots) == "importance_0_10"
+    slots[qualified_slot_key(1, "importance_0_10")] = "not-a-number"
+    assert first_missing_slot(1, slots) == "importance_0_10"
+    slots[qualified_slot_key(1, "importance_0_10")] = "8"
+    assert first_missing_slot(1, slots) == "confidence_0_10"
 
 
 def test_initial_substate():
@@ -59,10 +57,10 @@ def test_max_user_turns_per_stage_defined():
 
 
 def test_pad_incomplete_stage_fills_cap_marker():
-    slots: dict = {qualified_slot_key(1, "recent_pattern"): "x"}
+    slots: dict = {qualified_slot_key(1, "recent_drinking_pattern"): "x"}
     assert pad_incomplete_stage_with_cap_marker(1, slots) is True
     assert stage_slots_complete(1, slots)
-    assert slots.get(qualified_slot_key(1, "importance_rating_0_10")) == "0"
+    assert slots.get(qualified_slot_key(1, "importance_0_10")) == "0"
     assert slots.get(qualified_slot_key(1, "most_concerning_episode")) == CAP_MARKER_MAX_TURNS
 
 
@@ -70,10 +68,9 @@ def test_stage3_shrink_path():
     """信心 <7 时必须依次填 if_then_plan_revised 与 final_confidence_0_10_after_shrink。"""
     slots: dict = {}
     for s in (
-        "selected_target_situation",
         "selected_strategy",
         "if_then_plan",
-        "obstacle",
+        "likely_obstacle",
         "workaround",
     ):
         slots[qualified_slot_key(3, s)] = "x"
@@ -104,10 +101,9 @@ def test_eligibility_crisis_screen_fails():
 def test_stage3_no_shrink_when_conf_high():
     slots = {}
     for s in (
-        "selected_target_situation",
         "selected_strategy",
         "if_then_plan",
-        "obstacle",
+        "likely_obstacle",
         "workaround",
         "final_confidence_0_10",
     ):

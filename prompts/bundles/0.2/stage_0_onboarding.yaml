@@ -1,22 +1,19 @@
 # Stage 0: onboarding / PDF preferred name + study orientation + ready to start
 warm:
   transition: "Good. Next we'll talk about your recent drinking and what you want to change."
-  stage_hint: "Collect name, study disclaimer acknowledgment, readiness; no therapy tone."
+  stage_hint: "Collect preferred name and readiness only; keep study boundary wording brief and fixed."
   slots:
-    preferred_name: "What should we call you? A first name or nickname is fine."
-    orientation_ack: "Thanks for joining. This is about 20–25 minutes of text for research—not treatment or crisis care. In one short sentence, please confirm you understand."
+    preferred_name: "This is a research chat (not treatment or emergency care), and you can skip questions. What should we call you? A first name or nickname is fine."
     ready_to_start: "Are you ready to begin now? (If not, a brief note is fine.)"
 neutral:
   transition: "Next: recent drinking pattern, a concerning episode, and reasons to cut down."
-  stage_hint: "Name, confirm understanding, readiness; factual wording."
+  stage_hint: "Collect preferred name and readiness; factual wording."
   slots:
-    preferred_name: "Please enter your preferred name or nickname for this session."
-    orientation_ack: "This is a ~20–25 minute research chat (text only; not treatment or crisis support). Please confirm you understand."
+    preferred_name: "This is a text-only research chat (not treatment or emergency care), and you may skip questions. Please enter your preferred name or nickname."
     ready_to_start: "Please confirm you are ready to start now (yes/no or a short note)."
 supportive_practical:
   transition: "Good. Next we'll map your recent drinking pattern and your top reason to cut down—small steps."
-  stage_hint: "Brief validation OK; keep questions concrete and one at a time."
+  stage_hint: "Collect preferred name and readiness only; brief validation is fine."
   slots:
-    preferred_name: "What should we call you? First name or nickname is fine."
-    orientation_ack: "This is a research chat (about 20–25 minutes), not treatment or emergency care. It includes safety rules and you can skip a question. In one short line, please confirm you understand."
+    preferred_name: "This is a research chat (not treatment or emergency care), and you can skip questions. What should we call you? First name or nickname is fine."
     ready_to_start: "When you're ready, reply yes to start—or a short note if you need a moment."

@@ -12,6 +12,7 @@ from app.models import (  # noqa: F401
     LlmCall,
     SessionFollowup,
     SessionRecord,
+    StageStateEvent,
     SurveyResponse,
 )
 

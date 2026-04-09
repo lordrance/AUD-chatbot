@@ -21,7 +21,7 @@ def test_load_default_bundle() -> None:
     assert b.version_ref == "safechat-aud@0.2.1"
     assert "notes" in b.global_data or "product" in b.global_data
     assert b.stages[0]["warm"]["slots"]["preferred_name"]
-    assert b.stages[0]["warm"]["slots"]["orientation_ack"]
+    assert b.stages[0]["warm"]["slots"]["ready_to_start"]
     assert b.supportive_practical.get("style") == "supportive_practical"
     assert b.stages[0]["supportive_practical"]["slots"]["preferred_name"]
 

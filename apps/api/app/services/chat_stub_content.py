@@ -58,20 +58,16 @@ def _slot_from_bundle(bundle: PromptBundle, arm: str, stage: int, slot: str) -> 
 # (warm_text, neutral_text) — PDF 对齐槽位英文回退
 _SLOT_FALLBACK_PAIR: dict[tuple[int, str], tuple[str, str]] = {
     (0, "preferred_name"): (
+        "This is a research chat (not treatment or emergency care), and you can skip questions. "
         "What should we call you? A first name or nickname is fine.",
-        "Please enter your preferred name or nickname for this session.",
-    ),
-    (0, "orientation_ack"): (
-        "Thanks for joining. This is about 20–25 minutes of text for research—not treatment or crisis care. "
-        "In one short sentence, please confirm you understand.",
-        "This is a ~20–25 minute research chat (text only; not treatment or crisis support). "
-        "Please confirm you understand.",
+        "This is a text-only research chat (not treatment or emergency care), and you may skip questions. "
+        "Please enter your preferred name or nickname.",
     ),
     (0, "ready_to_start"): (
         "Are you ready to begin now? (If not, a brief note is fine.)",
         "Please confirm you are ready to start now (yes/no or a short note).",
     ),
-    (1, "recent_pattern"): (
+    (1, "recent_drinking_pattern"): (
         "Over the past week or two, what did your drinking look like overall?",
         "Briefly describe your drinking pattern over the past week or two (frequency and rough amount).",
     ),
@@ -79,46 +75,42 @@ _SLOT_FALLBACK_PAIR: dict[tuple[int, str], tuple[str, str]] = {
         "Thinking recently, which time stood out as most concerning for you—and why?",
         "Which recent episode of drinking concerns you most? One sentence is enough.",
     ),
-    (1, "reason_to_cut_down"): (
+    (1, "top_reason_to_cut_down"): (
         "What matters most to you about drinking less—even one sentence helps.",
         "In one sentence, what is your main reason for wanting to reduce drinking?",
     ),
-    (1, "importance_rating_0_10"): (
+    (1, "importance_0_10"): (
         "From 0–10, how important is changing your drinking right now? (0 = not important, 10 = extremely.)",
         "Rate from 0 to 10 how important reducing drinking is for you right now.",
     ),
-    (1, "confidence_rating_0_10"): (
+    (1, "confidence_0_10"): (
         "From 0–10, how confident do you feel that you could make a change if you decided to? "
         "(0 = not confident, 10 = very confident.)",
         "Rate from 0 to 10 how confident you are that you could change your drinking if you chose to.",
     ),
-    (2, "target_high_risk_situation"): (
+    (2, "target_situation"): (
         "Which situation most often pulls you toward drinking more than you want? Pick one priority.",
         "Name the single highest-risk drinking situation you want to focus on.",
     ),
-    (2, "people"): (
-        "Who is usually around in that situation (or who matters there)? Short answer is fine.",
-        "Who is typically present or relevant in that situation?",
-    ),
-    (2, "place"): (
+    (2, "where"): (
         "Where does it usually happen?",
         "Where does this situation usually take place?",
     ),
-    (2, "time"): (
+    (2, "when"): (
         "What time of day or week does it tend to happen?",
         "When does this situation tend to occur (time of day, day of week, etc.)?",
     ),
-    (2, "emotion_or_internal_state"): (
+    (2, "who_with"): (
+        "Who is usually around in that situation (or who matters there)? Short answer is fine.",
+        "Who is typically present or relevant in that situation?",
+    ),
+    (2, "emotion_or_state"): (
         "What do you tend to feel right before drinking in that moment?",
         "What emotions or internal state show up right before you drink there?",
     ),
-    (2, "cue_or_trigger"): (
+    (2, "immediate_trigger"): (
         "What is the clearest cue that makes picking up a drink most likely?",
         "What cue or trigger most strongly leads to drinking in that situation?",
-    ),
-    (3, "selected_target_situation"): (
-        "Let's lock one situation: in your own words, which situation are we planning for?",
-        "Confirm the one situation this plan will target (one short phrase).",
     ),
     (3, "selected_strategy"): (
         "From the strategy ideas we discussed, which one do you want to try first (or your own short label)?",
@@ -128,7 +120,7 @@ _SLOT_FALLBACK_PAIR: dict[tuple[int, str], tuple[str, str]] = {
         'Write one if–then plan: "If [trigger], then [small action I will take]."',
         'Give one sentence in "If …, then …" format for your smallest doable step.',
     ),
-    (3, "obstacle"): (
+    (3, "likely_obstacle"): (
         "What is the main obstacle that could get in the way?",
         "What obstacle might make this plan hard?",
     ),
@@ -148,19 +140,19 @@ _SLOT_FALLBACK_PAIR: dict[tuple[int, str], tuple[str, str]] = {
         "After shrinking the plan, what is your confidence now from 0–10?",
         "Rate 0–10 how confident you are in this revised smaller plan.",
     ),
-    (4, "top_reason"): (
+    (4, "summary_reason"): (
         "To close: in one line, what is your top reason for cutting down?",
         "State your main reason to reduce drinking (one line).",
     ),
-    (4, "top_trigger"): (
+    (4, "summary_trigger"): (
         "In one line, what is the main trigger situation you focused on?",
         "State the main high-risk situation in one line.",
     ),
-    (4, "chosen_plan"): (
+    (4, "summary_plan"): (
         "In one line, restate your if–then plan.",
         "Restate your chosen if–then plan in one line.",
     ),
-    (4, "closing_confidence_0_10"): (
+    (4, "summary_confidence"): (
         "From 0–10, how confident are you in this plan as you leave the chat?",
         "Rate 0–10 your confidence in this plan right now.",
     ),
