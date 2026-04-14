@@ -4,6 +4,7 @@
 """
 import secrets
 import uuid
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -68,7 +69,12 @@ from app.services.chat_fsm import (
 from app.services.chat_llm_compose import build_turn_messages
 from app.services.chat_stub_content import build_assistant_slot_stub, load_strategies_placeholder
 from app.services.eligibility import evaluate_eligibility
-from app.services.llm_client import call_chat_turn_structured, effective_llm_model, llm_is_configured
+from app.services.llm_client import (
+    call_chat_turn_structured,
+    effective_llm_model,
+    llm_endpoint_hang_risk,
+    llm_is_configured,
+)
 from app.services.prompt_registry import load_bundle, resolve_version_ref_for_session
 from app.services.flow_messages import format_ineligible_message
 from app.services.safety_routing import (
@@ -319,8 +325,8 @@ def _append_stage_state_event(
     )
 
 
-def _heuristic_style_fidelity(assistant_text: str, preferred_name: str | None = None) -> dict[str, Any]:
-    """规则型 style fidelity 标签（最小可用）：先启发式，后续可人工复核。"""
+def _heuristic_style_fidelity(assistant_text: str) -> dict[str, Any]:
+    """规则型 style fidelity 标签（最小可用）：先启发式，后续可人工复核。不采集姓名，故不使用参与者姓名匹配。"""
     txt = (assistant_text or "").strip()
     low = txt.lower()
     num_questions = txt.count("?")
@@ -330,7 +336,7 @@ def _heuristic_style_fidelity(assistant_text: str, preferred_name: str | None = 
     has_summary = any(k in low for k in ("to summarize", "in short", "you said", "summary"))
     has_practical_suggestion = any(k in low for k in ("if", "then", "plan", "step", "try", "backup"))
     has_autonomy_support = any(k in low for k in ("you can choose", "if you want", "when you're ready", "your choice"))
-    uses_name = bool(preferred_name and preferred_name.strip() and preferred_name.strip().lower() in low)
+    uses_name = False
     directiveness_score = min(5, max(1, 1 + int(any(k in low for k in ("should", "must", "need to", "do this")))))
     warmth_score = min(5, max(1, 1 + int(has_reflection) + int(has_affirmation) + int(has_autonomy_support)))
     return {
@@ -1150,7 +1156,19 @@ def post_chat_turn(
             mode = "transition"
 
     policy_l2 = routing == RoutingAction.SHOW_RESOURCES_AND_END_CHAT
-    llm_attempted = llm_is_configured() and not policy_l2 and mode != "stage1_feedback_bridge"
+    llm_attempted = (
+        llm_is_configured()
+        and not llm_endpoint_hang_risk()
+        and not policy_l2
+        and mode != "stage1_feedback_bridge"
+    )
+    if llm_is_configured() and llm_endpoint_hang_risk():
+        _record_audit(
+            db,
+            row.id,
+            "llm_skipped_known_hang_risk",
+            {"exchange_index": exchange_index, "stage": st},
+        )
     llm_res = None
     assistant_text = assistant_stub
     stub_flag = True
@@ -1189,9 +1207,27 @@ def post_chat_turn(
             recent_transcript=recent,
             strategies=strategies,
         )
-        llm_res = call_chat_turn_structured(messages)
-        if llm_res.ok and llm_res.parsed:
-            assistant_text = llm_res.parsed.assistant_text[:4000]
+        hard_timeout_sec = 8.0
+        ex = ThreadPoolExecutor(max_workers=1)
+        fut = ex.submit(call_chat_turn_structured, messages)
+        try:
+            llm_res = fut.result(timeout=hard_timeout_sec)
+            ex.shutdown(wait=False, cancel_futures=False)
+        except FuturesTimeoutError:
+            # 注意：不能使用 `with ThreadPoolExecutor(...)`，否则超时后 __exit__ 会等待工作线程结束，仍可能卡住请求。
+            fut.cancel()
+            ex.shutdown(wait=False, cancel_futures=True)
+            llm_res = None
+            _record_audit(
+                db,
+                row.id,
+                "llm_hard_timeout_fallback",
+                {"exchange_index": exchange_index, "stage": st, "hard_timeout_sec": hard_timeout_sec},
+            )
+        llm_ok = bool(getattr(llm_res, "ok", False)) if llm_res is not None else False
+        llm_parsed = getattr(llm_res, "parsed", None) if llm_res is not None else None
+        if llm_ok and llm_parsed:
+            assistant_text = llm_parsed.assistant_text[:4000]
             stub_flag = False
 
     if policy_l2:
@@ -1287,8 +1323,9 @@ def post_chat_turn(
                 stub_meta["llm_error"] = llm_res.error
     else:
         stub_meta["llm_skipped"] = True
-    preferred_name_for_tag = str(slots.get(qualified_slot_key(0, "preferred_name")) or "").strip() or None
-    stub_meta["style_fidelity"] = _heuristic_style_fidelity(assistant_text, preferred_name_for_tag)
+        stub_meta["style_fidelity"] = _heuristic_style_fidelity(assistant_text)
+    if "style_fidelity" not in stub_meta:
+        stub_meta["style_fidelity"] = _heuristic_style_fidelity(assistant_text)
     _record_audit(
         db,
         row.id,

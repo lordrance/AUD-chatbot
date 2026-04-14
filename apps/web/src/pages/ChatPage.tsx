@@ -27,8 +27,7 @@ function emitUiEvent(event_type: string, event_value?: string | null, turn_index
 }
 
 const QUICK: Record<string, string[]> = {
-  "0:preferred_name": ["Alex", "Sam"],
-  "0:ready_to_start": ["Yes, this is a good time", "I'm free now"],
+  "0:ready_to_start": ["Yes, I'm ready to start", "I'm ready for the drinking questions"],
   "1:recent_drinking_pattern": ["About three or four times last week", "It varied"],
   "1:most_concerning_episode": ["Last weekend I drank more than I wanted", "After work on Friday"],
   "1:top_reason_to_cut_down": ["I want to drink less", "Mostly sleep and health"],
@@ -241,14 +240,16 @@ export function ChatPage() {
           </p>
         )}
         <p className="muted small">
-          Text only. Answer the questions you see; use quick phrases or type freely. This chat is{" "}
-          <strong>not</strong> continuously monitored by staff.
+          Text only. Please stay anonymous—do not share your real name or other identifying details. Questions focus on
+          drinking-related topics. Use quick phrases or type freely. This chat is <strong>not</strong> continuously
+          monitored by staff.
           {done ? " The chat has ended; continuing to the next step…" : ""}
         </p>
         <div className="msg-list" role="log" aria-live="polite">
           {messages.length === 0 && (
             <p className="muted">
-              Type your <strong>first</strong> reply below (for example, confirm you read the study information).
+              Type your <strong>first</strong> reply below (for example, confirm you are ready to start the
+              drinking-related questions—no name needed).
             </p>
           )}
           {messages.map((m, i) => (

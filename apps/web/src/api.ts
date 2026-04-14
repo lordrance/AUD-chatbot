@@ -67,8 +67,19 @@ export async function createSession(): Promise<{ session_id: string; session_tok
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  const raw = await r.text();
+  if (!r.ok) {
+    let msg = raw;
+    try {
+      const j = JSON.parse(raw) as { detail?: unknown; message?: unknown };
+      if (typeof j.message === "string") msg = j.message;
+      else if (typeof j.detail === "string") msg = j.detail;
+    } catch {
+      /*非 JSON 时沿用原文本 */
+    }
+    throw new Error(msg || `Request failed (${r.status})`);
+  }
+  return JSON.parse(raw) as { session_id: string; session_token: string };
 }
 
 /** GET 当前会话聚合状态（阶段、槽位、安全提示等）。 */

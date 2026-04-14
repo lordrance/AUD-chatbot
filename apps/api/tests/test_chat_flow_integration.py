@@ -66,9 +66,8 @@ def _baseline_payload() -> dict:
     }
 
 
-# 对齐 answer2.pdf 槽位：23 轮输入（Stage0=2, Stage1=5, Stage2=6, Stage3=5, Stage4=5）。
-CHAT_TURNS_23: list[str] = [
-    "Alex",
+# 对齐 FSM：22 轮输入（Stage0=1 匿名就绪, Stage1=5, Stage2=6, Stage3=5, Stage4=5）。
+CHAT_TURNS_22: list[str] = [
     "Yes, ready to start.",
     "About three times last week, a few drinks each time.",
     "Last Friday I drank more than I wanted.",
@@ -145,7 +144,7 @@ def test_stage_progression_and_chat_close(client: TestClient) -> None:
     h = _auth_headers(token)
 
     chat_closed_flags: list[bool] = []
-    for i, text in enumerate(CHAT_TURNS_23):
+    for i, text in enumerate(CHAT_TURNS_22):
         body = _post_chat_turn_ack_stage1(client, sid, token, text)
         assert body["stub"] is True
         assert body.get("prompt_version") == "safechat-aud@0.2.1"
@@ -161,17 +160,17 @@ def test_stage_progression_and_chat_close(client: TestClient) -> None:
 
     st_end = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
     assert st_end.get("chat_summary") is not None
-    assert st_end["chat_summary"].get("schema_version") == "4"
+    assert st_end["chat_summary"].get("schema_version") == "5"
 
 
 def test_chat_summary_persistence_has_export_keys(client: TestClient) -> None:
     """摘要 JSON 含 v2 与兼容键。"""
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    _run_chat_until_closed(client, sid, token, CHAT_TURNS_23)
+    _run_chat_until_closed(client, sid, token, CHAT_TURNS_22)
     summary = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()["chat_summary"]
     assert summary is not None
-    assert summary.get("schema_version") == "4"
+    assert summary.get("schema_version") == "5"
     for key in (
         "top_reason",
         "top_trigger",
@@ -196,7 +195,7 @@ def test_stage1_feedback_pending_blocks_chat_until_continue(client: TestClient) 
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
     saw_feedback = False
-    for text in CHAT_TURNS_23:
+    for text in CHAT_TURNS_22:
         r = client.post(f"/api/v1/sessions/{sid}/chat/turn", json={"text": text}, headers=h)
         assert r.status_code == 200, r.text
         if r.json().get("stage1_feedback_required"):
@@ -218,16 +217,16 @@ def test_stage3_low_confidence_forces_shrink_slots(client: TestClient) -> None:
     # 将 Stage3 末信心改为 5，触发缩小分支；
     # 追加的 2 轮必须紧跟 Stage3（而不是放到 Stage4 之后）。
     turns = (
-        list(CHAT_TURNS_23[:17])
+        list(CHAT_TURNS_22[:16])
         + ["5"]
         + [
             "If stressed, I will wait five minutes before any drink.",
             "7",
         ]
-        + list(CHAT_TURNS_23[18:])
+        + list(CHAT_TURNS_22[17:])
     )
     n = len(turns)
-    assert n == 25
+    assert n == 24
     _run_chat_until_closed(client, sid, token, turns)
     st = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
     assert st["status"] == "post_survey_pending"
@@ -240,7 +239,7 @@ def test_acceptance_e2e_linear_to_completed(client: TestClient) -> None:
     """验收：单会话线性完成至 completed（无 LLM，等同主力 API 路径）。"""
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    _run_chat_until_closed(client, sid, token, CHAT_TURNS_23)
+    _run_chat_until_closed(client, sid, token, CHAT_TURNS_22)
     st = client.get(f"/api/v1/sessions/{sid}/state", headers=h).json()
     assert st["status"] == "post_survey_pending"
     assert st.get("chat_summary") is not None
@@ -282,7 +281,7 @@ def test_post_survey_only_after_chat_completed(client: TestClient) -> None:
     )
     assert bad.status_code == 400
 
-    _run_chat_until_closed(client, sid, token, CHAT_TURNS_23)
+    _run_chat_until_closed(client, sid, token, CHAT_TURNS_22)
 
     st = client.get(f"/api/v1/sessions/{sid}/state", headers=h)
     assert st.status_code == 200
@@ -308,7 +307,7 @@ def test_randomize_arm_idempotent(client: TestClient) -> None:
 def test_arm_fixed_during_chat(client: TestClient) -> None:
     sid, token, arm = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    for text in CHAT_TURNS_23[:3]:
+    for text in CHAT_TURNS_22[:3]:
         _post_chat_turn_ack_stage1(client, sid, token, text)
         st = client.get(f"/api/v1/sessions/{sid}/state", headers=h)
         assert st.json()["arm"] == arm
@@ -372,7 +371,7 @@ def test_followup_public_token_open_and_submit(client: TestClient) -> None:
     """验收：随访 opt-in → 公开 GET/POST token → 重复提交 409。"""
     sid, token, _ = _bootstrap_to_chat_ready(client)
     h = _auth_headers(token)
-    _run_chat_until_closed(client, sid, token, CHAT_TURNS_23)
+    _run_chat_until_closed(client, sid, token, CHAT_TURNS_22)
     post_body = _sample_post_survey_json()
     post_body["open_most_helpful"] = "ok"
     post_body["open_unnatural_or_uncomfortable"] = "ok"

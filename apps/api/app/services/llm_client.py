@@ -82,6 +82,12 @@ def _use_gemini_compat_response_mode() -> bool:
     return "generativelanguage.googleapis.com" in base
 
 
+def llm_endpoint_hang_risk() -> bool:
+    """部分 Google 兼容端点在当前 SDK 调用链下可能阻塞；遇到时应走 stub。"""
+    base = (effective_llm_base_url() or "").lower()
+    return "generativelanguage.googleapis.com" in base
+
+
 def _client() -> OpenAI | None:
     """构造 OpenAI SDK 客户端；无 Key 时返回 None。"""
     key = effective_llm_api_key()
@@ -222,65 +228,71 @@ def call_chat_turn_structured(messages: list[dict[str, str]]) -> LlmCallResult:
     t0 = time.perf_counter()
     gemini_json_object = _use_gemini_compat_response_mode()
 
-    # Primary: Responses API (strict schema); if all attempts fail then fallback.
-    for attempt in range(max_retries + 1):
-        total_attempts += 1
-        try:
-            resp = _call_responses_once(
-                client,
-                model=model,
-                timeout=timeout,
-                spec=spec,
-                messages=messages,
-            )
-            latency_ms = int((time.perf_counter() - t0) * 1000)
-            content = _extract_response_output_text(resp)
-            parsed = _parse_structured_content(content)
-            usage = getattr(resp, "usage", None)
-            inp = getattr(usage, "input_tokens", None) if usage else None
-            out_t = getattr(usage, "output_tokens", None) if usage else None
-            tot = getattr(usage, "total_tokens", None) if usage else None
-            raw_dict = json.loads(content)
-            rid = str(getattr(resp, "id", "") or "").strip() or None
-            return LlmCallResult(
-                ok=True,
-                parsed=parsed,
-                raw_json=raw_dict if isinstance(raw_dict, dict) else None,
-                latency_ms=latency_ms,
-                model_version=str(getattr(resp, "model", "") or model),
-                response_id=rid,
-                previous_response_id=(
-                    str(getattr(resp, "previous_response_id", "") or "")
-                    if getattr(resp, "previous_response_id", None)
-                    else None
-                ),
-                input_tokens=inp,
-                output_tokens=out_t,
-                total_tokens=tot,
-                raw_content=content[:20000],
-                attempts=total_attempts,
-                api_type="responses",
-                finish_reason=_extract_responses_finish_reason(resp),
-                refusal_flag=_extract_responses_refusal(resp),
-                retry_count=attempt,
-            )
-        except (APITimeoutError, APIConnectionError, RateLimitError) as e:
-            responses_last_err = f"responses:{type(e).__name__}: {e}"
-            if attempt >= max_retries:
+    # Primary transport selection:
+    # - OpenAI native endpoint: Responses API primary, Chat Completions fallback.
+    # - Gemini/OpenAI-compat endpoint: Chat Completions primary (Responses may hang/unsupported).
+    use_responses_primary = not gemini_json_object
+    if use_responses_primary:
+        for attempt in range(max_retries + 1):
+            total_attempts += 1
+            try:
+                resp = _call_responses_once(
+                    client,
+                    model=model,
+                    timeout=timeout,
+                    spec=spec,
+                    messages=messages,
+                )
+                latency_ms = int((time.perf_counter() - t0) * 1000)
+                content = _extract_response_output_text(resp)
+                parsed = _parse_structured_content(content)
+                usage = getattr(resp, "usage", None)
+                inp = getattr(usage, "input_tokens", None) if usage else None
+                out_t = getattr(usage, "output_tokens", None) if usage else None
+                tot = getattr(usage, "total_tokens", None) if usage else None
+                raw_dict = json.loads(content)
+                rid = str(getattr(resp, "id", "") or "").strip() or None
+                return LlmCallResult(
+                    ok=True,
+                    parsed=parsed,
+                    raw_json=raw_dict if isinstance(raw_dict, dict) else None,
+                    latency_ms=latency_ms,
+                    model_version=str(getattr(resp, "model", "") or model),
+                    response_id=rid,
+                    previous_response_id=(
+                        str(getattr(resp, "previous_response_id", "") or "")
+                        if getattr(resp, "previous_response_id", None)
+                        else None
+                    ),
+                    input_tokens=inp,
+                    output_tokens=out_t,
+                    total_tokens=tot,
+                    raw_content=content[:20000],
+                    attempts=total_attempts,
+                    api_type="responses",
+                    finish_reason=_extract_responses_finish_reason(resp),
+                    refusal_flag=_extract_responses_refusal(resp),
+                    retry_count=attempt,
+                )
+            except (APITimeoutError, APIConnectionError, RateLimitError) as e:
+                responses_last_err = f"responses:{type(e).__name__}: {e}"
+                if attempt >= max_retries:
+                    break
+                time.sleep(0.4 * (attempt + 1))
+            except APIStatusError as e:
+                responses_last_err = f"responses:APIStatusError: {e.status_code} {e.message}"
+                if e.status_code in (429, 500, 502, 503) and attempt < max_retries:
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
                 break
-            time.sleep(0.4 * (attempt + 1))
-        except APIStatusError as e:
-            responses_last_err = f"responses:APIStatusError: {e.status_code} {e.message}"
-            if e.status_code in (429, 500, 502, 503) and attempt < max_retries:
-                time.sleep(0.5 * (attempt + 1))
-                continue
-            break
-        except (json.JSONDecodeError, ValueError) as e:
-            responses_last_err = f"responses:parse_error: {e}"
-            break
-        except Exception as e:  # pragma: no cover - defensive
-            responses_last_err = f"responses:{type(e).__name__}: {e}"
-            break
+            except (json.JSONDecodeError, ValueError) as e:
+                responses_last_err = f"responses:parse_error: {e}"
+                break
+            except Exception as e:  # pragma: no cover - defensive
+                responses_last_err = f"responses:{type(e).__name__}: {e}"
+                break
+    else:
+        responses_last_err = "responses:skipped_for_gemini_compat_endpoint"
 
     # Fallback: Chat Completions (json_schema/json_object).
     for attempt in range(max_retries + 1):
@@ -319,7 +331,7 @@ def call_chat_turn_structured(messages: list[dict[str, str]]) -> LlmCallResult:
                 total_tokens=tot,
                 raw_content=content[:20000],
                 attempts=total_attempts,
-                api_type="chat_completions_fallback",
+                api_type=("chat_completions_primary" if not use_responses_primary else "chat_completions_fallback"),
                 retry_count=attempt,
                 fallback_reason=responses_last_err,
             )
@@ -348,6 +360,6 @@ def call_chat_turn_structured(messages: list[dict[str, str]]) -> LlmCallResult:
         latency_ms=latency_ms,
         model_version=model,
         attempts=total_attempts,
-        api_type="chat_completions_fallback",
+        api_type=("chat_completions_primary" if not use_responses_primary else "chat_completions_fallback"),
         fallback_reason=responses_last_err,
     )

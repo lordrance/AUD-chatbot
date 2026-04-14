@@ -57,15 +57,13 @@ def _slot_from_bundle(bundle: PromptBundle, arm: str, stage: int, slot: str) -> 
 
 # (warm_text, neutral_text) — PDF 对齐槽位英文回退
 _SLOT_FALLBACK_PAIR: dict[tuple[int, str], tuple[str, str]] = {
-    (0, "preferred_name"): (
-        "This is a research chat (not treatment or emergency care), and you can skip questions. "
-        "What should we call you? A first name or nickname is fine.",
-        "This is a text-only research chat (not treatment or emergency care), and you may skip questions. "
-        "Please enter your preferred name or nickname.",
-    ),
     (0, "ready_to_start"): (
-        "Are you ready to begin now? (If not, a brief note is fine.)",
-        "Please confirm you are ready to start now (yes/no or a short note).",
+        "This is a research chat (not treatment or emergency care), and you can skip questions. "
+        "We do not need your real name—please stay anonymous. "
+        "Are you ready to begin the drinking-related questions now? (If not, a brief note is fine.)",
+        "This is a text-only research chat (not treatment or emergency care), and you may skip questions. "
+        "Do not share your real name. Please confirm you are ready to start the alcohol-related questions "
+        "(yes/no or a short note).",
     ),
     (1, "recent_drinking_pattern"): (
         "Over the past week or two, what did your drinking look like overall?",

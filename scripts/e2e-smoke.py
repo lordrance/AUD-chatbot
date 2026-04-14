@@ -23,8 +23,7 @@ DEFAULT_BASE = os.environ.get("E2E_API_BASE", "http://127.0.0.1:8000").rstrip("/
 
 # 按 FSM 槽位顺序：每轮 user 文本填满「当前第一个缺失槽」（ neutral 内容，避免安全闸误触发）
 CHAT_TURNS: list[str] = [
-    # Stage 0
-    "烟测参与者",
+    # Stage 0（匿名，仅就绪）
     "是的，我已阅读说明并准备好开始。",
     # Stage 1
     "通常工作日晚上会喝 2 杯啤酒，周末有时多一点。",

@@ -104,7 +104,7 @@ def test_gemini_compat_base_url_uses_json_object(monkeypatch: pytest.MonkeyPatch
     assert r.ok
     kw = mock_client.chat.completions.create.call_args.kwargs
     assert kw["response_format"] == {"type": "json_object"}
-    assert r.api_type == "chat_completions_fallback"
+    assert r.api_type == "chat_completions_primary"
 
 
 def test_responses_fallback_to_chat_completions(monkeypatch: pytest.MonkeyPatch) -> None:

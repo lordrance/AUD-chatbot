@@ -12,7 +12,7 @@
 
 | Stage | 目标 | 必填槽位（顺序） |
 |------|------|------------------|
-| 0 | 边界说明 + 就绪 | `preferred_name`, `ready_to_start` |
+| 0 | 边界说明 + 匿名就绪（不采集姓名） | `ready_to_start` |
 | 1 | 近期饮酒 + 动机 + 评分 | `recent_drinking_pattern`, `most_concerning_episode`, `top_reason_to_cut_down`, `importance_0_10`, `confidence_0_10` |
 | 2 | 收敛一个关键情境 | `target_situation`, `where`, `when`, `who_with`, `emotion_or_state`, `immediate_trigger` |
 | 3 | 策略与 if–then 计划 | `selected_strategy`, `if_then_plan`, `likely_obstacle`, `workaround`, `final_confidence_0_10`；若 `<7` 追加 `if_then_plan_revised`, `final_confidence_0_10_after_shrink` |
@@ -29,7 +29,7 @@
 
 ## 摘要卡与 PDF 导出键
 
-- `sessions.chat_summary_json.schema_version` 当前为 `4`。
+- `sessions.chat_summary_json.schema_version` 当前为 `5`（`preferred_name` 恒为 `null`，不采集显示名）。
 - 主字段：`summary_reason`、`summary_trigger`、`summary_plan`、`summary_confidence`。
 - 同时保留 `pdf_*` 字段（`pdf_recent_drinking_pattern` 等）用于论文表格直出。
 
@@ -45,6 +45,6 @@
 | Prompt bundle | `sessions.prompt_bundle_version` |
 | Strategy library version | `sessions.session_meta_json.strategy_library_version` + `audit_events.randomized` |
 | LLM transport | `llm_calls.api_type` / `state.llm_api_type_label` |
-| 摘要 schema | `chat_summary_json.schema_version=4` |
+| 摘要 schema | `chat_summary_json.schema_version=5` |
 | 后测 schema | `survey_responses(schema_version=4, instrument=post)` |
 | 前后端构建号 | `sessions.session_meta_json.frontend_build/backend_build` |

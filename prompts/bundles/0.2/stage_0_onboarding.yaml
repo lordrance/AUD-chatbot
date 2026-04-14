@@ -1,19 +1,16 @@
-# Stage 0: onboarding / PDF preferred name + study orientation + ready to start
+# Stage 0: anonymous onboarding — no real names; boundaries + readiness only.
 warm:
   transition: "Good. Next we'll talk about your recent drinking and what you want to change."
-  stage_hint: "Collect preferred name and readiness only; keep study boundary wording brief and fixed."
+  stage_hint: "Do not ask for names or other identifying details; only study boundaries and readiness."
   slots:
-    preferred_name: "This is a research chat (not treatment or emergency care), and you can skip questions. What should we call you? A first name or nickname is fine."
-    ready_to_start: "Are you ready to begin now? (If not, a brief note is fine.)"
+    ready_to_start: "This is a research chat (not treatment or emergency care), and you can skip questions. We do not need your real name—please stay anonymous. Are you ready to begin the drinking-related questions now? (If not, a brief note is fine.)"
 neutral:
   transition: "Next: recent drinking pattern, a concerning episode, and reasons to cut down."
-  stage_hint: "Collect preferred name and readiness; factual wording."
+  stage_hint: "Anonymous session; no name collection; factual wording."
   slots:
-    preferred_name: "This is a text-only research chat (not treatment or emergency care), and you may skip questions. Please enter your preferred name or nickname."
-    ready_to_start: "Please confirm you are ready to start now (yes/no or a short note)."
+    ready_to_start: "This is a text-only research chat (not treatment or emergency care), and you may skip questions. Do not share your real name or other identifying information. Please confirm you are ready to start the alcohol-related questions (yes/no or a short note)."
 supportive_practical:
   transition: "Good. Next we'll map your recent drinking pattern and your top reason to cut down—small steps."
-  stage_hint: "Collect preferred name and readiness only; brief validation is fine."
+  stage_hint: "No names; brief validation is fine; readiness only."
   slots:
-    preferred_name: "This is a research chat (not treatment or emergency care), and you can skip questions. What should we call you? First name or nickname is fine."
-    ready_to_start: "When you're ready, reply yes to start—or a short note if you need a moment."
+    ready_to_start: "This is a research chat (not treatment or emergency care), and you can skip questions. Please stay anonymous—no real names needed. When you're ready, reply yes to start the drinking-related part—or a short note if you need a moment."

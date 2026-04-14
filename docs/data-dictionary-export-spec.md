@@ -81,12 +81,13 @@
 
 ## D. 结构化摘要卡（`sessions.chat_summary_json`）
 
-由 `app/services/chat_summary.py` 生成，`schema_version` 当前为 **`"4"`**（与常量 `CHAT_SUMMARY_SCHEMA_VERSION` 一致）。
+由 `app/services/chat_summary.py` 生成，`schema_version` 当前为 **`"5"`**（与常量 `CHAT_SUMMARY_SCHEMA_VERSION` 一致）。
 
 | JSON 键 | 说明 |
 |---------|------|
-| `schema_version` | `"4"` |
-| `preferred_name`, `summary_reason`, `summary_trigger`, `summary_plan` | Stage 0–4 槽位聚合 |
+| `schema_version` | `"5"` |
+| `preferred_name` | 恒为 `null`（协议匿名化，不采集显示名/真名） |
+| `summary_reason`, `summary_trigger`, `summary_plan` | Stage 1–4 槽位聚合 |
 | `summary_confidence`, `optional_takeaway` | Stage 4 |
 | `selected_strategy`, `trigger_context`, `micro_plan_if_then` | Stage 2–3 |
 | `change_readiness_baseline_1_10`, `importance_to_reduce_baseline_0_10` | 来自基线问卷 |

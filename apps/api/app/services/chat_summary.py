@@ -12,7 +12,7 @@ from app.models.session import SessionRecord
 from app.models.survey_response import SurveyResponse
 from app.services.chat_fsm import parse_rating_0_10, qualified_slot_key
 
-CHAT_SUMMARY_SCHEMA_VERSION = "4"
+CHAT_SUMMARY_SCHEMA_VERSION = "5"
 
 
 def _slot(slots: dict[str, Any], stage: int, key: str) -> str | None:
@@ -59,7 +59,6 @@ def build_chat_summary_dict(row: SessionRecord, db: OrmSession) -> dict[str, Any
         if isinstance(imp, int) and 0 <= imp <= 10:
             importance_baseline = imp
 
-    preferred_name = _slot(slots, 0, "preferred_name")
     reason_s1 = _slot(slots, 1, "top_reason_to_cut_down")
     top_reason = _slot(slots, 4, "summary_reason") or reason_s1
     top_trigger = _slot(slots, 4, "summary_trigger") or _slot(slots, 2, "target_situation")
@@ -94,7 +93,7 @@ def build_chat_summary_dict(row: SessionRecord, db: OrmSession) -> dict[str, Any
 
     return {
         "schema_version": CHAT_SUMMARY_SCHEMA_VERSION,
-        "preferred_name": preferred_name,
+        "preferred_name": None,
         "summary_reason": top_reason,
         "summary_trigger": top_trigger,
         "summary_plan": chosen_plan,

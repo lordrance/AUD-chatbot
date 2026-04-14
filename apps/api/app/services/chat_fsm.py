@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-# Stage 0–4：每阶段必收槽位（顺序即收集顺序）；严格对齐 answer2.pdf 命名。
+# Stage 0–4：每阶段必收槽位（顺序即收集顺序）；Stage0 不收集姓名，仅边界说明 + 就绪（匿名化）。
 REQUIRED_SLOTS_BY_STAGE: dict[int, tuple[str, ...]] = {
-    0: ("preferred_name", "ready_to_start"),
+    0: ("ready_to_start",),
     1: (
         "recent_drinking_pattern",
         "most_concerning_episode",

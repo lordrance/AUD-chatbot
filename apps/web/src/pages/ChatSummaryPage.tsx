@@ -60,7 +60,8 @@ export function ChatSummaryPage() {
       <section className="card">
         <h2>Chat summary</h2>
         <p className="muted small">
-          Structured recap from your chat responses before the post-survey (data use as described in consent).
+          Structured recap from your anonymous, drinking-related chat before the post-survey (data use as described in
+          consent).
         </p>
         {summary === undefined && <p className="muted">Loading…</p>}
         {summary != null && Object.keys(summary).length === 0 && (
@@ -68,7 +69,6 @@ export function ChatSummaryPage() {
         )}
         {summary != null && Object.keys(summary).length > 0 && (
           <div className="summary-card">
-            {line("Preferred name", summary.preferred_name as string | undefined)}
             {line("Main reason to cut down", (summary.summary_reason ?? summary.top_reason_to_cut_down) as string | undefined)}
             {line(
               "Main trigger / high-risk situation",
